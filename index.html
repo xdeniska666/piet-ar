@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Piet-AR</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #video-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+        video, canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        canvas {
+            z-index: 2;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            z-index: 3;
+            backdrop-filter: blur(10px);
+            font-size: 14px;
+            pointer-events: none;
+        }
+        #product-data {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 16px;
+            border-radius: 16px;
+            z-index: 3;
+            backdrop-filter: blur(10px);
+            display: none;
+            border-left: 4px solid #ff6600;
+            pointer-events: none;
+        }
+        .product-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .product-price {
+            font-size: 28px;
+            color: #ffaa00;
+            font-weight: bold;
+        }
+        .product-composition {
+            font-size: 14px;
+            margin-top: 8px;
+            color: #ddd;
+        }
+        button {
+            pointer-events: auto;
+            background: #ff6600;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: white;
+            margin-top: 12px;
+            cursor: pointer;
+        }
+        .scan-hint {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 3;
+            white-space: nowrap;
+        }
+        #start-btn {
+            position: absolute;
+            bottom: 30%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff6600;
+            color: white;
+            padding: 14px 28px;
+            font-size: 18px;
+            border: none;
+            border-radius: 40px;
+            z-index: 10;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+<div id="video-container">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+</div>
+<button id="start-btn">🎥 Включить камеру</button>
+<div id="product-data">
+    <div class="product-name" id="product-name"></div>
+    <div class="product-price" id="product-price"></div>
+    <div class="product-composition" id="product-composition"></div>
+    <button onclick="window.open(document.getElementById('recipe-link').href, '_blank')" id="recipe-btn">📖 Рецепт</button>
+    <a id="recipe-link" href="#" target="_blank" style="display:none;"></a>
+</div>
+<div id="info">
+    🎯 Нажмите "Включить камеру"
+</div>
+<div class="scan-hint" id="scan-hint">
+    📷 Камера не запущена
+</div>
+
+<script type="text/javascript">
+    let video = document.getElementById('video');
+    let canvas = document.getElementById('canvas');
+    let ctx = canvas.getContext('2d');
+    let streaming = false;
+    let cvReady = false;
+    let detector = null;
+    let animationId = null;
+
+    function initDetector() {
+        if (!cvReady) return false;
+        try {
+            dictionary = cv.aruco.Dictionary_get(cv.aruco.DICT_4X4_50);
+            detector = new cv.aruco.ArucoDetector(dictionary, new cv.aruco.DetectorParameters());
+            return true;
+        } catch(e) {
+            console.log("Ошибка инициализации детектора:", e);
+            return false;
+        }
+    }
+
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+            });
+            video.srcObject = stream;
+            await video.play();
+            streaming = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            document.getElementById('info').innerHTML = '🎥 Камера работает';
+            document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+            document.getElementById('start-btn').style.display = 'none';
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            processFrame();
+        } catch(err) {
+            document.getElementById('info').innerHTML = '❌ Ошибка доступа к камере: ' + err.message;
+            document.getElementById('scan-hint').innerHTML = '❌ Камера недоступна';
+            console.error(err);
+        }
+    }
+
+    async function processFrame() {
+        if (!streaming || !cvReady || !detector) {
+            animationId = requestAnimationFrame(processFrame);
+            return;
+        }
+        
+        if (video.videoWidth && video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            let image = cv.imread(canvas);
+            let corners = new cv.MatVector();
+            let ids = new cv.Mat();
+            
+            try {
+                detector.detectMarkers(image, corners, ids);
+                
+                if (ids.rows > 0) {
+                    let markerId = ids.data32S[0];
+                    document.getElementById('scan-hint').innerHTML = '✅ Найден маркер ID: ' + markerId;
+                    document.getElementById('scan-hint').style.background = 'rgba(0,128,0,0.7)';
+                    
+                    cv.aruco.drawDetectedMarkers(image, corners, ids);
+                    
+                    try {
+                        let response = await fetch(`/api/product/${markerId}`);
+                        if (response.ok) {
+                            let product = await response.json();
+                            document.getElementById('product-name').innerText = product.name;
+                            document.getElementById('product-price').innerText = product.price + ' ₽';
+                            document.getElementById('product-composition').innerText = 'Состав: ' + product.composition;
+                            let recipeLink = document.getElementById('recipe-link');
+                            recipeLink.href = product.recipe_url;
+                            document.getElementById('product-data').style.display = 'block';
+                            document.getElementById('info').innerHTML = '🎉 ' + product.name;
+                        } else {
+                            document.getElementById('product-data').style.display = 'none';
+                        }
+                    } catch(e) {
+                        console.log('Ошибка запроса:', e);
+                        document.getElementById('product-data').style.display = 'none';
+                    }
+                } else {
+                    document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+                    document.getElementById('scan-hint').style.background = 'rgba(0,0,0,0.6)';
+                    document.getElementById('product-data').style.display = 'none';
+                }
+            } catch(e) {
+                console.log('Ошибка детекции:', e);
+            }
+            
+            cv.imshow(canvas, image);
+            image.delete();
+            corners.delete();
+            ids.delete();
+        }
+        
+        animationId = requestAnimationFrame(processFrame);
+    }
+
+    function onOpenCvReady() {
+        cvReady = true;
+        initDetector();
+        document.getElementById('scan-hint').innerHTML = '📷 Нажмите "Включить камеру"';
+    }
+
+    function loadOpenCV() {
+        const script = document.createElement('script');
+        script.src = 'https://docs.opencv.org/4.12.0/opencv.js';
+        script.onload = () => {
+            document.getElementById('scan-hint').innerHTML = '📷 OpenCV загружен';
+            onOpenCvReady();
+        };
+        script.onerror = () => {
+            document.getElementById('info').innerHTML = '❌ Не удалось загрузить OpenCV.js';
+            document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки OpenCV';
+        };
+        document.head.appendChild(script);
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startCamera);
+    loadOpenCV();
+</script>
+</body>
+</html>
