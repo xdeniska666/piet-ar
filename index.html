@@ -243,7 +243,7 @@
 
     function loadOpenCV() {
         const script = document.createElement('script');
-        script.src = 'https://docs.opencv.org/4.12.0/opencv.js';
+        script.src = '/opencv.js';
         script.onload = () => {
             document.getElementById('scan-hint').innerHTML = '📷 OpenCV загружен';
             onOpenCvReady();
