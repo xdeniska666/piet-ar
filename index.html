@@ -142,8 +142,11 @@
     function initDetector() {
         if (!cvReady) return false;
         try {
-            dictionary = cv.aruco.Dictionary_get(cv.aruco.DICT_4X4_50);
-            detector = new cv.aruco.ArucoDetector(dictionary, new cv.aruco.DetectorParameters());
+            // Используем новый API (работает в OpenCV.js 4.x)
+            let dictionary = cv.getPredefinedDictionary(cv.DICT_4X4_50);
+            let parameters = new cv.aruco_DetectorParameters();
+            detector = new cv.aruco_ArucoDetector(dictionary, parameters);
+            console.log("✅ Детектор инициализирован");
             return true;
         } catch(e) {
             console.log("Ошибка инициализации детектора:", e);
@@ -191,9 +194,11 @@
             
             try {
                 detector.detectMarkers(image, corners, ids);
+                console.log("Детекция завершена, найдено маркеров:", ids.rows);
                 
                 if (ids.rows > 0) {
                     let markerId = ids.data32S[0];
+                    console.log("✅ Найден маркер ID:", markerId);
                     document.getElementById('scan-hint').innerHTML = '✅ Найден маркер ID: ' + markerId;
                     document.getElementById('scan-hint').style.background = 'rgba(0,128,0,0.7)';
                     
