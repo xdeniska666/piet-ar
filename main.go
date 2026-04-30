@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 )
 
 type Product struct {
@@ -53,11 +52,8 @@ func main() {
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
-	// Порт для Render берётся из переменной окружения PORT
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	// ==== ЖЁСТКО ЗАДАЁМ ПОРТ ДЛЯ RENDER ====
+	port := "10000"
 
 	log.Println("Сервер запущен на http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
