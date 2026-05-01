@@ -134,10 +134,11 @@
     window.onerror = function(message, source, lineno, colno, error) {
         alert("ОШИБКА: " + message + " на строке " + lineno);
     };
-        
+
     let video = document.getElementById('video');
     let canvas = document.getElementById('canvas');
     let ctx = canvas.getContext('2d');
+    let lastDetectedId = -1;
     let streaming = false;
     let cvReady = false;
     let detector = null;
@@ -182,65 +183,82 @@
     }
 
     async function processFrame() {
-        if (!streaming || !cvReady || !detector) {
+        if (!video.videoWidth) {
             animationId = requestAnimationFrame(processFrame);
             return;
         }
-        
-        if (video.videoWidth && video.videoHeight) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        let image = null;
+        let gray = null;
+        let corners = null;
+        let ids = null;
+
+        try {
+            // 1. Считываем и готовим кадр
+            image = cv.imread(video);
+            gray = new cv.Mat();
+            cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
+
+            corners = new cv.MatVector();
+            ids = new cv.Mat();
+
+            // 2. Детектируем ТОЛЬКО ОДИН РАЗ
+            detector.detectMarkers(gray, corners, ids);
+
+            // 3. Обработка логики
+            if (ids.rows > 0) {
+                let markerId = ids.data32S[0];
             
-            let image = cv.imread(canvas);
-            let corners = new cv.MatVector();
-            let ids = new cv.Mat();
-            
-            try {
-                detector.detectMarkers(image, corners, ids);
-                console.log("Детекция завершена, найдено маркеров:", ids.rows);
+                // Рисуем маркер на кадре (визуализация)
+                cv.aruco.drawDetectedMarkers(image, corners, ids);
+
+                // Если нашли новый маркер — делаем запрос
+                if (markerId !== lastDetectedId) {
+                    lastDetectedId = markerId;
                 
-                if (ids.rows > 0) {
-                    let markerId = ids.data32S[0];
-                    console.log("✅ Найден маркер ID:", markerId);
-                    document.getElementById('scan-hint').innerHTML = '✅ Найден маркер ID: ' + markerId;
-                    document.getElementById('scan-hint').style.background = 'rgba(0,128,0,0.7)';
-                    
-                    cv.aruco.drawDetectedMarkers(image, corners, ids);
-                    
+                    document.getElementById('scan-hint').innerHTML = '⏳ Загрузка...';
+                
                     try {
                         let response = await fetch(`/api/product/${markerId}`);
                         if (response.ok) {
                             let product = await response.json();
+                        
+                            // Обновляем DOM
                             document.getElementById('product-name').innerText = product.name;
                             document.getElementById('product-price').innerText = product.price + ' ₽';
                             document.getElementById('product-composition').innerText = 'Состав: ' + product.composition;
-                            let recipeLink = document.getElementById('recipe-link');
-                            recipeLink.href = product.recipe_url;
+                            document.getElementById('recipe-link').href = product.recipe_url;
+                        
                             document.getElementById('product-data').style.display = 'block';
                             document.getElementById('info').innerHTML = '🎉 ' + product.name;
-                        } else {
-                            document.getElementById('product-data').style.display = 'none';
+                            document.getElementById('scan-hint').innerHTML = '✅ Маркер ' + markerId + ' найден!';
                         }
                     } catch(e) {
-                        console.log('Ошибка запроса:', e);
-                        document.getElementById('product-data').style.display = 'none';
+                    console.error('Ошибка API:', e);
                     }
-                } else {
-                    document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
-                    document.getElementById('scan-hint').style.background = 'rgba(0,0,0,0.6)';
-                    document.getElementById('product-data').style.display = 'none';
                 }
-            } catch(e) {
-                console.log('Ошибка детекции:', e);
+            } else {
+                // Маркера нет в кадре
+                if (lastDetectedId !== -1) {
+                    lastDetectedId = -1;
+                    document.getElementById('product-data').style.display = 'none';
+                    document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+                }
             }
-            
+
+            // Показываем обработанный кадр
             cv.imshow(canvas, image);
-            image.delete();
-            corners.delete();
-            ids.delete();
+
+        } catch(e) {
+            console.error('Критическая ошибка детекции:', e);
+        } finally {
+            // ОЧИСТКА ПАМЯТИ (ОБЯЗАТЕЛЬНО, ИНАЧЕ УПАДЕТ ЧЕРЕЗ 5 СЕКУНД)
+            if (image) image.delete();
+            if (gray) gray.delete();
+            if (corners) corners.delete();
+            if (ids) ids.delete();
         }
-        
+
         animationId = requestAnimationFrame(processFrame);
     }
 
