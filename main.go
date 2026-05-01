@@ -55,6 +55,6 @@ func main() {
 	// ==== ЖЁСТКО ЗАДАЁМ ПОРТ ДЛЯ RENDER ====
 	port := "10000"
 
-	log.Println("Сервер запущен на http://localhost:8080")
+	log.Printf("🚀 Сервер запущен на порту %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

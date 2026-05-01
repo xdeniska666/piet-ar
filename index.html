@@ -131,6 +131,10 @@
 </div>
 
 <script type="text/javascript">
+    window.onerror = function(message, source, lineno, colno, error) {
+        alert("ОШИБКА: " + message + " на строке " + lineno);
+    };
+        
     let video = document.getElementById('video');
     let canvas = document.getElementById('canvas');
     let ctx = canvas.getContext('2d');
