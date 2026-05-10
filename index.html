@@ -202,92 +202,43 @@
     }
 
     async function processFrame() {
-        if (!video.videoWidth) {
-            animationId = requestAnimationFrame(processFrame);
-            return;
-        }
+        if (!cvReady || !detector || !streaming) return;
 
-        let image = null;
-        let gray = null;
-        let corners = null;
-        let ids = null;
-
+        let image, gray, corners, ids;
+        
         try {
-            // 1. Считываем и готовим кадр
+            // Читаем кадр
             image = cv.imread(video);
+            
+            // ПРИНУДИТЕЛЬНО уменьшаем кадр до 640x480 (облегчаем жизнь процессору A30)
+            let dsize = new cv.Size(640, 480);
+            cv.resize(image, image, dsize, 0, 0, cv.INTER_AREA);
+
             gray = new cv.Mat();
             cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
-
-            // 1.5 - это контраст (чуть выше нормы), 10 - яркость. 
-            // Это поможет "вытянуть" детали из черного пятна.
-            // gray.convertTo(gray, -1, 1.5, 10);
 
             corners = new cv.MatVector();
             ids = new cv.Mat();
 
-            // 2. Детектируем ТОЛЬКО ОДИН РАЗ
+            // Ищем маркеры
             detector.detectMarkers(gray, corners, ids);
 
-            // Рисуем рамки ВСЕХ найденных кандидатов
-            if (corners.size() > 0) {
+            if (ids.rows > 0) {
+                // Если нашел — рисуем жирную рамку
                 cv.aruco.drawDetectedMarkers(image, corners, ids);
-            }
-            cv.imshow(canvas, image); // Показываем ЦВЕТНУЮ картинку с рамками    
-
-            // 3. Обработка логики
-            if (ids && ids.rows > 0) {
-                // Используем getIntAt(0, 0) — это самый надежный способ для Android
                 let markerId = ids.getIntAt(0, 0);
-            
-                // Рисуем маркер на кадре (визуализация)
-                cv.aruco.drawDetectedMarkers(image, corners, ids);
+                document.getElementById('scan-hint').innerHTML = '🎯 ВИЖУ ID: ' + markerId;
 
-                // Если нашли новый маркер — делаем запрос
                 if (markerId !== lastDetectedId) {
                     lastDetectedId = markerId;
-                
-                    document.getElementById('scan-hint').innerHTML = '⏳ Загрузка товара #' + markerId;
-                
-                    try {
-                        // Используем полный URL твоего сервера на Render
-                        let response = await fetch(`https://piet-ar.onrender.com/api/product/${markerId}`);
-                        if (response.ok) {
-                            let product = await response.json();
-                        
-                            // Обновляем DOM
-                            document.getElementById('product-name').innerText = product.name;
-                            document.getElementById('product-price').innerText = product.price + ' ₽';
-                            document.getElementById('product-composition').innerText = 'Состав: ' + product.composition;
-                            document.getElementById('recipe-link').href = product.recipe_url;
-                        
-                            document.getElementById('product-data').style.display = 'block';
-                            document.getElementById('info').innerHTML = '🎉 ' + product.name;
-                            document.getElementById('scan-hint').innerHTML = '✅ Объект распознан';
-                        }
-                    } catch(e) {
-                        console.error('Ошибка связи с сервером:', e);
-                        document.getElementById('scan-hint').innerHTML = '❌ Ошибка сети';
-                    }
-                }
-            } else {
-                // Если маркер исчез из кадра
-                if (lastDetectedId !== -1) {
-                    lastDetectedId = -1;
-                    // Не скрываем данные сразу, даем пользователю их прочитать
-                    setTimeout(() => {
-                        if (lastDetectedId === -1) {
-                            document.getElementById('product-data').style.display = 'none';
-                            document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
-                        }
-                    }, 3000);    
-                }
+                    fetchData(markerId); // Вынеси fetch в отдельную функцию для чистоты
+                }    
             }    
 
-            // Выводим ЦВЕТНОЙ кадр с нарисованными рамками
             cv.imshow(canvas, image);
 
         } catch(e) {
-            console.error('Критическая ошибка детекции:', e);
+            console.error(e);
         } finally {
             // ОЧИСТКА ПАМЯТИ (ОБЯЗАТЕЛЬНО, ИНАЧЕ УПАДЕТ ЧЕРЕЗ 5 СЕКУНД)
             if (image) image.delete();
