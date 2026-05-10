@@ -186,8 +186,8 @@
             
             await video.play();
             streaming = true;
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            canvas.width = 640;
+            canvas.height = 480;
             document.getElementById('info').innerHTML = '🎥 Камера работает';
             document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
             document.getElementById('start-btn').style.display = 'none';
@@ -228,8 +228,15 @@
             // 2. Детектируем ТОЛЬКО ОДИН РАЗ
             detector.detectMarkers(gray, corners, ids);
 
+            // Рисуем рамки ВСЕХ найденных кандидатов
+            if (corners.size() > 0) {
+                cv.aruco.drawDetectedMarkers(image, corners, ids);
+            }
+            cv.imshow(canvas, image); // Показываем ЦВЕТНУЮ картинку с рамками    
+
             // 3. Обработка логики
-            if (ids.rows > 0) {
+            if (ids && ids.rows > 0) {
+                // Используем getIntAt(0, 0) — это самый надежный способ для Android
                 let markerId = ids.getIntAt(0, 0);
             
                 // Рисуем маркер на кадре (визуализация)
@@ -239,9 +246,10 @@
                 if (markerId !== lastDetectedId) {
                     lastDetectedId = markerId;
                 
-                    document.getElementById('scan-hint').innerHTML = '⏳ Загрузка...';
+                    document.getElementById('scan-hint').innerHTML = '⏳ Загрузка товара #' + markerId;
                 
                     try {
+                        // Используем полный URL твоего сервера на Render
                         let response = await fetch(`https://piet-ar.onrender.com/api/product/${markerId}`);
                         if (response.ok) {
                             let product = await response.json();
@@ -254,22 +262,28 @@
                         
                             document.getElementById('product-data').style.display = 'block';
                             document.getElementById('info').innerHTML = '🎉 ' + product.name;
-                            document.getElementById('scan-hint').innerHTML = '✅ Маркер ' + markerId + ' найден!';
+                            document.getElementById('scan-hint').innerHTML = '✅ Объект распознан';
                         }
                     } catch(e) {
-                    console.error('Ошибка API:', e);
+                        console.error('Ошибка связи с сервером:', e);
+                        document.getElementById('scan-hint').innerHTML = '❌ Ошибка сети';
                     }
                 }
             } else {
-                // Маркера нет в кадре
+                // Если маркер исчез из кадра
                 if (lastDetectedId !== -1) {
                     lastDetectedId = -1;
-                    document.getElementById('product-data').style.display = 'none';
-                    document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+                    // Не скрываем данные сразу, даем пользователю их прочитать
+                    setTimeout(() => {
+                        if (lastDetectedId === -1) {
+                            document.getElementById('product-data').style.display = 'none';
+                            document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+                        }
+                    }, 3000);    
                 }
-            }
+            }    
 
-            // Показываем обработанный кадр
+            // Выводим ЦВЕТНОЙ кадр с нарисованными рамками
             cv.imshow(canvas, image);
 
         } catch(e) {
