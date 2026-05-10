@@ -147,11 +147,26 @@
     function initDetector() {
         if (!cvReady) return false;
         try {
-            // Используем новый API (работает в OpenCV.js 4.x)
             let dictionary = cv.getPredefinedDictionary(cv.DICT_4X4_50);
             let parameters = new cv.aruco_DetectorParameters();
+
+            // 1. Позволяем находить более мелкие и размытые маркеры
+            parameters.minMarkerPerimeterRate = 0.02; // Стандарт 0.03, уменьшаем порог
+
+            // 2. Смягчаем требования к геометрии (точность аппроксимации углов)
+            // Это поможет, если края маркера на фото кажутся "зубчатыми"
+            parameters.polygonalApproxAccuracyRate = 0.01; // Стандарт 0.05
+
+            // 3. Улучшаем поиск в условиях теней
+            parameters.adaptiveThreshWinSizeMin = 3;
+            parameters.adaptiveThreshWinSizeMax = 33;
+            parameters.adaptiveThreshWinSizeStep = 10;
+
+            // 4. Игнорируем мелкий мусор
+            parameters.minDistanceToBorder = 0;
+
             detector = new cv.aruco_ArucoDetector(dictionary, parameters);
-            console.log("✅ Детектор инициализирован");
+            console.log("✅ Детектор переведен в режим высокой совместимости");
             return true;
         } catch(e) {
             console.log("Ошибка инициализации детектора:", e);
@@ -203,6 +218,10 @@
             gray = new cv.Mat();
             cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
 
+            // 1.5 - это контраст (чуть выше нормы), 10 - яркость. 
+            // Это поможет "вытянуть" детали из черного пятна.
+            // gray.convertTo(gray, -1, 1.5, 10);
+
             corners = new cv.MatVector();
             ids = new cv.Mat();
 
@@ -211,7 +230,7 @@
 
             // 3. Обработка логики
             if (ids.rows > 0) {
-                let markerId = ids.data32S[0];
+                let markerId = ids.getIntAt(0, 0);
             
                 // Рисуем маркер на кадре (визуализация)
                 cv.aruco.drawDetectedMarkers(image, corners, ids);
