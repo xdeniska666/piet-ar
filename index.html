@@ -168,25 +168,17 @@
 
             // ВАЖНО: Добавляем обработку промиса play()
             const playPromise = video.play();
-
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // Воспроизведение началось успешно
-                    streaming = true;
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    document.getElementById('info').innerHTML = '🎥 Камера работает';
-                    document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
-                    document.getElementById('start-btn').style.display = 'none';
-
-                    // Запускаем цикл только после того, как видео реально пошло
-                    if (animationId) cancelAnimationFrame(animationId);
-                    processFrame();
-                }).catch(error => {
-                    // Игнорируем ошибку прерывания, если она возникла
-                    console.log("Автовоспроизведение прервано, но это ок:", error);
-                });
-            }       
+            
+            await video.play();
+            streaming = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            document.getElementById('info').innerHTML = '🎥 Камера работает';
+            document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
+            document.getElementById('start-btn').style.display = 'none';
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            processFrame();
         } catch(err) {
             document.getElementById('info').innerHTML = '❌ Ошибка доступа к камере: ' + err.message;
             document.getElementById('scan-hint').innerHTML = '❌ Камера недоступна';
@@ -231,7 +223,7 @@
                     document.getElementById('scan-hint').innerHTML = '⏳ Загрузка...';
                 
                     try {
-                        let response = await fetch(`/api/product/${markerId}`);
+                        let response = await fetch(`https://piet-ar.onrender.com/api/product/${markerId}`);
                         if (response.ok) {
                             let product = await response.json();
                         
@@ -259,7 +251,7 @@
             }
 
             // Показываем обработанный кадр
-            cv.imshow(canvas, gray);
+            cv.imshow(canvas, image);
 
         } catch(e) {
             console.error('Критическая ошибка детекции:', e);
