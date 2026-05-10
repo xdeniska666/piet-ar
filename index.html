@@ -153,9 +153,8 @@
             // 1. Позволяем находить более мелкие и размытые маркеры
             parameters.minMarkerPerimeterRate = 0.02; // Стандарт 0.03, уменьшаем порог
 
-            // 2. Смягчаем требования к геометрии (точность аппроксимации углов)
-            // Это поможет, если края маркера на фото кажутся "зубчатыми"
-            parameters.polygonalApproxAccuracyRate = 0.01; // Стандарт 0.05
+            // Возвращаем мягкую точность для плохих линз
+            parameters.polygonalApproxAccuracyRate = 0.05; // Стандарт 0.05
 
             // 3. Улучшаем поиск в условиях теней
             parameters.adaptiveThreshWinSizeMin = 3;
@@ -180,9 +179,6 @@
                 video: { facingMode: "environment" } 
             });
             video.srcObject = stream;
-
-            // ВАЖНО: Добавляем обработку промиса play()
-            const playPromise = video.play();
             
             await video.play();
             streaming = true;
@@ -204,43 +200,51 @@
     async function processFrame() {
         if (!cvReady || !detector || !streaming) return;
 
-        let image, gray, corners, ids;
+        let image = null;
+        let gray = null;
+        let corners = null;
+        let ids = null;
         
         try {
-            // Читаем кадр
-            image = cv.imread(video);
+            // Создаем временную матрицу из видео
+            image = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+            let cap = new cv.VideoCapture(video);
+            cap.read(image);
             
-            // ПРИНУДИТЕЛЬНО уменьшаем кадр до 640x480 (облегчаем жизнь процессору A30)
+            // Уменьшаем до 640x480 для скорости
             let dsize = new cv.Size(640, 480);
             cv.resize(image, image, dsize, 0, 0, cv.INTER_AREA);
 
             gray = new cv.Mat();
             cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
 
+            // Инициализируем только ОДИН раз
             corners = new cv.MatVector();
             ids = new cv.Mat();
 
-            // Ищем маркеры
+            // Пытаемся найти маркеры
             detector.detectMarkers(gray, corners, ids);
 
             if (ids.rows > 0) {
-                // Если нашел — рисуем жирную рамку
+                // Рисуем рамки прямо на уменьшенном кадре
                 cv.aruco.drawDetectedMarkers(image, corners, ids);
                 let markerId = ids.getIntAt(0, 0);
-                document.getElementById('scan-hint').innerHTML = '🎯 ВИЖУ ID: ' + markerId;
 
                 if (markerId !== lastDetectedId) {
                     lastDetectedId = markerId;
-                    fetchData(markerId); // Вынеси fetch в отдельную функцию для чистоты
+                    document.getElementById('scan-hint').innerHTML = '🎯 Вижу ID: ' + markerId;
+                    // Функция запроса к бэкенду
+                    fetchData(markerId);
                 }    
             }    
 
+            // Выводим результат на canvas
             cv.imshow(canvas, image);
 
         } catch(e) {
-            console.error(e);
+            console.error("Ошибка в цикле:", e);
         } finally {
-            // ОЧИСТКА ПАМЯТИ (ОБЯЗАТЕЛЬНО, ИНАЧЕ УПАДЕТ ЧЕРЕЗ 5 СЕКУНД)
+            // Обязательная чистка
             if (image) image.delete();
             if (gray) gray.delete();
             if (corners) corners.delete();
@@ -269,6 +273,29 @@
         };
         document.head.appendChild(script);
     }
+
+    async function fetchData(markerId) {
+        try {
+            // Используем полный URL твоего бэкенда на Render
+            let response = await fetch(`https://piet-ar.onrender.com/api/product/${markerId}`);
+            if (response.ok) {
+                let product = await response.json();
+
+                // Заполняем поля данными из JSON
+                document.getElementById('product-name').innerText = product.name;
+                document.getElementById('product-price').innerText = product.price + ' ₽';
+                document.getElementById('product-composition').innerText = 'Состав: ' + product.composition;
+                document.getElementById('recipe-link').href = product.recipe_url;
+
+                // Показываем карточку товара
+                document.getElementById('product-data').style.display = 'block';
+            } else {
+                console.error("Товар не найден в базе");
+            }
+        } catch(e) {
+            console.error('Ошибка сети или сервера:', e);
+        }
+    }            
 
     document.getElementById('start-btn').addEventListener('click', startCamera);
     loadOpenCV();
