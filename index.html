@@ -314,21 +314,18 @@
     }
 
     function loadOpenCV() {
-        const script = document.createElement('script');
-        // Используем зеркало Cloudflare + антикэш
-        script.src = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/dist/opencv.js';
-        script.async = true;
+        // Очищаем кэш через уникальный параметр при каждом обновлении страницы
+        const cacheBuster = '?v=' + Date.now();
+        const script = document.querySelector(`script[src*="opencv.js"]`) || document.createElement('script');
+        script.src = 'https://docs.opencv.org/4.10.0/opencv.js' + cacheBuster;
 
-        script.onload = () => {
-            console.log("OpenCV загружен через jsDelivr");
-            onOpenCvReady();
-        };
-        script.onerror = () => {
-            document.getElementById('info').innerHTML = '❌ Ошибка сети: попробуйте мобильный интернет';
-            document.getElementById('scan-hint').innerHTML = '❌ Не удалось загрузить OpenCV';
-        };
-        document.head.appendChild(script);
-    }
+        if (!document.querySelector(`script[src*="opencv.js"]`)) {
+            script.async = true;
+            script.onload = () => onOpenCvReady();
+            script.onerror = () => document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки';
+            document.head.appendChild(script);
+        }
+    }    
 
     async function fetchData(markerId) {
         try {
