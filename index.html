@@ -313,19 +313,23 @@
         document.getElementById('scan-hint').innerHTML = '📷 Библиотека готова';
     }
 
-    function loadOpenCV() {
-        // Очищаем кэш через уникальный параметр при каждом обновлении страницы
-        const cacheBuster = '?v=' + Date.now();
-        const script = document.querySelector(`script[src*="opencv.js"]`) || document.createElement('script');
-        script.src = 'https://docs.opencv.org/4.10.0/opencv.js' + cacheBuster;
+        function loadOpenCV() {
+            // Очищаем кэш через уникальный параметр при каждом обновлении страницы
+            const cacheBuster = Date.now();
+            let script = document.querySelector('script[src*="opencv.js"]');
 
-        if (!document.querySelector(`script[src*="opencv.js"]`)) {
-            script.async = true;
-            script.onload = () => onOpenCvReady();
-            script.onerror = () => document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки';
-            document.head.appendChild(script);
-        }
-    }    
+            if (!script) {
+                script = document.createElement('script');
+                script.async = true;
+                script.onload = () => onOpenCvReady();
+                script.onerror = () => {
+                    document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки локального OpenCV';
+                };
+                document.head.appendChild(script);    
+            }
+            // Принудительно обновляем путь с уникальным ключом
+            script.src = '/opencv.js?v=' + Date.now();
+        }    
 
     async function fetchData(markerId) {
         try {
