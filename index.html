@@ -148,6 +148,12 @@
     function initDetector() {
         if (!cvReady) return false;
         try {
+            // Проверка: есть ли вообще модуль ArUco в этой версии библиотеки
+            if (!cv.aruco) {
+                document.getElementById('scan-hint').innerHTML = '❌ Ошибка: В OpenCV нет модуля ArUco';
+                return false;
+            }
+
             let dictionary = cv.getPredefinedDictionary(cv.DICT_4X4_50);
             let parameters = new cv.aruco_DetectorParameters();
 
@@ -156,21 +162,20 @@
 
             // Возвращаем мягкую точность для плохих линз
             parameters.polygonalApproxAccuracyRate = 0.05; // Стандарт 0.05
+            parameters.minDistanceToBorder = 0;
 
             // 3. Улучшаем поиск в условиях теней
             parameters.adaptiveThreshWinSizeMin = 3;
-            parameters.adaptiveThreshWinSizeMax = 33;
+            parameters.adaptiveThreshWinSizeMax = 23;
             parameters.adaptiveThreshWinSizeStep = 10;
 
-            // 4. Игнорируем мелкий мусор
-            parameters.minDistanceToBorder = 0;
-
             detector = new cv.aruco_ArucoDetector(dictionary, parameters);
+            console.log("✅ Детектор создан");
             return true;
         } catch(e) {
             // Если детектор не создался, мы увидим почему
-            document.getElementById('scan-hint').innerHTML = `❌ Ошибка детектора: ${e.message}`;
-            console.log("Ошибка инициализации детектора:", e);
+            document.getElementById('scan-hint').innerHTML = `❌ Ошибка инициализации: ${e.message}`;
+            console.error(e);
             return false;
         }
     }
@@ -214,8 +219,12 @@
     async function processFrame() {
         // Если чего-то не хватает, пишем об этом прямо на экран
         if (!cvReady) { document.getElementById('scan-hint').innerHTML = '⌛ Жду OpenCV...'; return; }
-        if (!detector) { document.getElementById('scan-hint').innerHTML = '⌛ Жду Детектор...'; return; }
         if (!streaming) { document.getElementById('scan-hint').innerHTML = '⌛ Жду Камеру...'; return; }
+
+        // Попытка переинициализации, если детектор еще не готов
+        if (!detector) {
+            if (!initDetector()) return;
+        }    
 
         let image = null;
         let gray = null;
