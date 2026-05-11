@@ -222,23 +222,29 @@
             corners = new cv.MatVector();
             ids = new cv.Mat();
 
-            // Пытаемся найти маркеры
+            // 1. Сначала запускаем поиск
             detector.detectMarkers(gray, corners, ids);
 
-            if (ids.rows > 0) {
-                // Рисуем рамки прямо на уменьшенном кадре
-                cv.aruco.drawDetectedMarkers(image, corners, ids);
+            // 2. БЛОК ДЕБАГА
+            let statusText = `Углов (кандидатов): ${corners.size()}`;
+
+            if (ids && ids.rows > 0) {
                 let markerId = ids.getIntAt(0, 0);
+                statusText += ` | 🎉 НАЙДЕН ID: ${markerId}`;
+
+                // Отрисовка рамки вокруг маркера
+                cv.aruco.drawDetectedMarkers(image, corners, ids);
 
                 if (markerId !== lastDetectedId) {
                     lastDetectedId = markerId;
-                    document.getElementById('scan-hint').innerHTML = '🎯 Вижу ID: ' + markerId;
-                    // Функция запроса к бэкенду
                     fetchData(markerId);
-                }    
-            }    
+                }
+            }
+            
+            // Обновляем текст на экране телефона
+            document.getElementById('scan-hint').innerHTML = statusText;
 
-            // Выводим результат на canvas
+            // 3. ВЫВОДИМ КАРТИНКУ НА ЭКРАН
             cv.imshow(canvas, image);
 
         } catch(e) {
