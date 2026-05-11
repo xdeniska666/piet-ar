@@ -316,16 +316,16 @@
     function loadOpenCV() {
         const script = document.createElement('script');
         // Используем зеркало Cloudflare + антикэш
-        script.src = 'https://docs.opencv.org/4.10.0/opencv.js?v=' + Date.now();
+        script.src = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/dist/opencv.js';
         script.async = true;
 
         script.onload = () => {
-            console.log("OpenCV загружен через UNPKG");
+            console.log("OpenCV загружен через jsDelivr");
             onOpenCvReady();
         };
         script.onerror = () => {
-            document.getElementById('info').innerHTML = '❌ Критическая ошибка сети';
-            document.getElementById('scan-hint').innerHTML = '❌ Не удалось подключиться к серверу библиотек';
+            document.getElementById('info').innerHTML = '❌ Ошибка сети: попробуйте мобильный интернет';
+            document.getElementById('scan-hint').innerHTML = '❌ Не удалось загрузить OpenCV';
         };
         document.head.appendChild(script);
     }
