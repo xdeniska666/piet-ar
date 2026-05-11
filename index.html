@@ -282,6 +282,12 @@
     function onOpenCvReady() {
         cvReady = true;
         initDetector();
+        console.log("OpenCV готов");
+
+        // Если камера уже включена, но цикл ждал OpenCV - запускаем!
+        if (streaming && !animationId) {
+            processFrame();
+        }    
         document.getElementById('scan-hint').innerHTML = '📷 Нажмите "Включить камеру"';
     }
 
