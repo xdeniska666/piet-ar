@@ -143,6 +143,7 @@
     let cvReady = false;
     let detector = null;
     let animationId = null;
+    let cap = null;
 
     function initDetector() {
         if (!cvReady) return false;
@@ -176,32 +177,41 @@
     async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
+                video: {
+                    facingMode: "environment",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }    
             });
             video.srcObject = stream;
             
             await video.play();
+
+            // Инициализируем захват кадров OpenCV один раз здесь
+            cap = new cv.VideoCapture(video);
+
             streaming = true;
-            canvas.width = 640;
-            canvas.height = 480;
-            document.getElementById('info').innerHTML = '🎥 Камера работает';
-            document.getElementById('scan-hint').innerHTML = '🔍 Ищу маркер...';
-            document.getElementById('start-btn').style.display = 'none';
             
-            if (animationId) cancelAnimationFrame(animationId);
-            processFrame();
+            // Скрываем кнопку старта
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('info').innerHTML = '🎥 Камера работает';
+            document.getElementById('scan-hint').innerHTML = '🔍 Инициализация потока...';
+
+            // Даем браузеру 300мс, чтобы точно определились videoWidth и videoHeight
+            setTimeout(() => {
+                if (animationId) cancelAnimationFrame(animationId);
+                processFrame();
+            }, 300);    
+            
         } catch(err) {
-            document.getElementById('info').innerHTML = '❌ Ошибка доступа к камере: ' + err.message;
-            document.getElementById('scan-hint').innerHTML = '❌ Камера недоступна';
+            document.getElementById('info').innerHTML = '❌ Ошибка камеры: ' + err.message;
+            document.getElementById('scan-hint').innerHTML = '❌ Доступ запрещен';
             console.error(err);
         }
     }
 
     async function processFrame() {
         if (!cvReady || !detector || !streaming) return;
-            // Если это условие не выполняется, надпись про углы не появится
-            console.log("Ждем готовности...");
-            return;
 
         let image = null;
         let gray = null;
@@ -209,9 +219,13 @@
         let ids = null;
         
         try {
-            // Создаем временную матрицу из видео
+            // Если видео еще не готово, пропускаем кадр
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                animationId = requestAnimationFrame(processFrame);
+                return;
+            }
+
             image = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-            let cap = new cv.VideoCapture(video);
             cap.read(image);
             
             // Уменьшаем до 640x480 для скорости
@@ -233,7 +247,7 @@
 
             if (ids && ids.rows > 0) {
                 let markerId = ids.getIntAt(0, 0);
-                statusText += ` | 🎉 НАЙДЕН ID: ${markerId}`;
+                statusText = `🎯 ID: ${markerId} | Углов: ${corners.size()}`;
 
                 // Отрисовка рамки вокруг маркера
                 cv.aruco.drawDetectedMarkers(image, corners, ids);
@@ -251,7 +265,9 @@
             cv.imshow(canvas, image);
 
         } catch(e) {
-            console.error("Ошибка в цикле:", e);
+            // Если будет ошибка, мы ее увидим на телефоне!
+            document.getElementById('scan-hint').innerHTML = `❌ Ошибка: ${e.message}`;
+            console.error(e);
         } finally {
             // Обязательная чистка
             if (image) image.delete();
