@@ -115,7 +115,7 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
 </div>
-<button id="start-btn">🎥 Включить камеру</button>
+<button id="start-btn" disabled>⌛ Загрузка библиотеки...</button>
 <div id="product-data">
     <div class="product-name" id="product-name"></div>
     <div class="product-price" id="product-price"></div>
@@ -181,6 +181,12 @@
     }
 
     async function startCamera() {
+        // Проверка на наличие OpenCV перед любым действием
+        if (typeof cv === 'undefined') {
+            alert("Библиотека OpenCV еще загружается. Пожалуйста, подождите.");
+            return;
+        }
+            
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: {
