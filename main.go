@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 type Product struct {
@@ -24,7 +25,7 @@ var products = map[int]Product{
 }
 
 func main() {
-	// Эндпоинт для получения данных по ID
+	// 1. Эндпоинт для API
 	http.HandleFunc("/api/product/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
@@ -43,18 +44,22 @@ func main() {
 		json.NewEncoder(w).Encode(product)
 	})
 
-	// Обработчик статических файлов (HTML, CSS, JS)
+	// 2. Раздача статики
+	fs := http.FileServer(http.Dir("./"))
+	// Используем HandleFunc, чтобы корень "/" отдавал index.html,
+	// но не мешал другим путям
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			http.ServeFile(w, r, "index.html")
-			return
-		}
-		http.ServeFile(w, r, r.URL.Path[1:])
+		// Если это не API, пробуем отдать файл из папки
+		fs.ServeHTTP(w, r)
 	})
 
-	// ==== ЖЁСТКО ЗАДАЁМ ПОРТ ДЛЯ RENDER ====
-	port := "10000"
+	// Динамический порт для Render
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "10000"
+	}
 
 	log.Printf("🚀 Сервер запущен на порту %s", port)
+	// Используем nil, так как мы настроили обработчики через http.Handle и http.HandleFunc
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

@@ -314,21 +314,32 @@
     }
 
         function loadOpenCV() {
-            // Очищаем кэш через уникальный параметр при каждом обновлении страницы
-            const cacheBuster = Date.now();
-            let script = document.querySelector('script[src*="opencv.js"]');
-
-            if (!script) {
-                script = document.createElement('script');
-                script.async = true;
-                script.onload = () => onOpenCvReady();
-                script.onerror = () => {
-                    document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки локального OpenCV';
-                };
-                document.head.appendChild(script);    
-            }
-            // Принудительно обновляем путь с уникальным ключом
+            const script = document.createElement('script');
+            // Загружаем локальный файл, который лежит рядом с main.go
+            // Добавляем v=Date.now(), чтобы телефон не использовал старый кэш
             script.src = '/opencv.js?v=' + Date.now();
+            script.async = true;
+
+            script.onload = () => {
+                // Проверяем, инициализировался ли OpenCV
+                if (typeof cv !== 'undefined') {
+                    console.log("OpenCV загружен локально");
+                    // Если через 1 сек cv.aruco всё еще undefined, значит файл не полный
+                    setTimeout(() => {
+                        if (cv.aruco) {
+                            onOpenCvReady();
+                        } else {
+                            document.getElementById('info').innerHTML = '❌ В локальном файле нет модуля ArUco';    
+                        }
+                    }, 500);
+                }
+            };  
+
+            script.onerror = () => {
+                document.getElementById('info').innerHTML = '❌ Не удалось найти opencv.js на сервере';
+            };
+            
+            document.head.appendChild(script);
         }    
 
     async function fetchData(markerId) {
