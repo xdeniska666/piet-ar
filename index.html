@@ -186,7 +186,7 @@
             alert("Библиотека OpenCV еще загружается. Пожалуйста, подождите.");
             return;
         }
-            
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: {
@@ -315,7 +315,7 @@
 
     function loadOpenCV() {
         const script = document.createElement('script');
-        script.src = 'https://docs.opencv.org/4.10.0/opencv.js';
+        script.src = 'https://docs.opencv.org/4.10.0/opencv.js?v=' + Date.now();
         script.onload = () => {
             document.getElementById('scan-hint').innerHTML = '📷 OpenCV загружен';
             onOpenCvReady();
