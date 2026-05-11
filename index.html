@@ -315,28 +315,24 @@
 
         function loadOpenCV() {
             const script = document.createElement('script');
-            // Загружаем локальный файл, который лежит рядом с main.go
-            // Добавляем v=Date.now(), чтобы телефон не использовал старый кэш
-            script.src = '/opencv.js?v=' + Date.now();
+            // Прямая ссылка на полную версию 4.13.0
+            script.src = 'https://docs.opencv.org/4.13.0/opencv.js';
             script.async = true;
 
             script.onload = () => {
-                // Проверяем, инициализировался ли OpenCV
-                if (typeof cv !== 'undefined') {
-                    console.log("OpenCV загружен локально");
-                    // Если через 1 сек cv.aruco всё еще undefined, значит файл не полный
-                    setTimeout(() => {
-                        if (cv.aruco) {
-                            onOpenCvReady();
-                        } else {
-                            document.getElementById('info').innerHTML = '❌ В локальном файле нет модуля ArUco';    
-                        }
-                    }, 500);
-                }
+                // Проверяем наличие модуля ArUco через небольшую паузу
+                setTimeout(() => {
+                    if (typeof cv !== 'undefined' && cv.aruco) {
+                        console.log("✅ OpenCV 4.13.0 с ArUco успешно загружен");
+                        onOpenCvReady();
+                    } else {    
+                        document.getElementById('info').innerHTML = '❌ В этой версии нет ArUco. Нужно искать другой файл.';
+                    }
+                }, 1000);
             };  
 
             script.onerror = () => {
-                document.getElementById('info').innerHTML = '❌ Не удалось найти opencv.js на сервере';
+                document.getElementById('info').innerHTML = '❌ Ошибка сети (возможно, нужен VPN)';
             };
             
             document.head.appendChild(script);
