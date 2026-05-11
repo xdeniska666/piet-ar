@@ -211,7 +211,10 @@
     }
 
     async function processFrame() {
-        if (!cvReady || !detector || !streaming) return;
+        // Если чего-то не хватает, пишем об этом прямо на экран
+        if (!cvReady) { document.getElementById('scan-hint').innerHTML = '⌛ Жду OpenCV...'; return; }
+        if (!detector) { document.getElementById('scan-hint').innerHTML = '⌛ Жду Детектор...'; return; }
+        if (!streaming) { document.getElementById('scan-hint').innerHTML = '⌛ Жду Камеру...'; return; }
 
         let image = null;
         let gray = null;
@@ -282,10 +285,10 @@
     function onOpenCvReady() {
         cvReady = true;
         initDetector();
-        console.log("OpenCV готов");
 
-        // Если камера уже включена, но цикл ждал OpenCV - запускаем!
+        // Если камера уже работает, а цикл обработки еще не запущен — стартуем его прямо здесь
         if (streaming && !animationId) {
+            console.log("OpenCV загрузился после камеры, запускаю цикл...");
             processFrame();
         }    
         document.getElementById('scan-hint').innerHTML = '📷 Нажмите "Включить камеру"';
