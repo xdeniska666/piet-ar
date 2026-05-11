@@ -316,13 +316,16 @@
     function loadOpenCV() {
         const script = document.createElement('script');
         // Используем зеркало Cloudflare + антикэш
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/opencv/4.10.0/opencv.js?v=' + Date.now();
+        script.src = 'https://unpkg.com/opencv.js@1.2.1/opencv.js';
+        script.async = true;
+
         script.onload = () => {
-            console.log("OpenCV загружен через CDN");
+            console.log("OpenCV загружен через UNPKG");
             onOpenCvReady();
         };
         script.onerror = () => {
-            document.getElementById('info').innerHTML = '❌ Ошибка загрузки CDN';
+            document.getElementById('info').innerHTML = '❌ Критическая ошибка сети';
+            document.getElementById('scan-hint').innerHTML = '❌ Не удалось подключиться к серверу библиотек';
         };
         document.head.appendChild(script);
     }
