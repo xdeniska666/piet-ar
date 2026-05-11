@@ -199,6 +199,9 @@
 
     async function processFrame() {
         if (!cvReady || !detector || !streaming) return;
+            // Если это условие не выполняется, надпись про углы не появится
+            console.log("Ждем готовности...");
+            return;
 
         let image = null;
         let gray = null;
