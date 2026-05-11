@@ -296,12 +296,15 @@
         cvReady = true;
         initDetector();
 
-        // Если камера уже работает, а цикл обработки еще не запущен — стартуем его прямо здесь
+        // Активируем кнопку только когда библиотека полностью готова
+        const btn = document.getElementById('start-btn');
+        btn.disabled = false;
+        btn.innerText = '🎥 Включить камеру';
+
         if (streaming && !animationId) {
-            console.log("OpenCV загрузился после камеры, запускаю цикл...");
             processFrame();
         }    
-        document.getElementById('scan-hint').innerHTML = '📷 Нажмите "Включить камеру"';
+        document.getElementById('scan-hint').innerHTML = '📷 Библиотека готова';
     }
 
     function loadOpenCV() {
