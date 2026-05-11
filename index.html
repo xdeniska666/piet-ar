@@ -316,7 +316,7 @@
     function loadOpenCV() {
         const script = document.createElement('script');
         // Используем зеркало Cloudflare + антикэш
-        script.src = 'https://unpkg.com/opencv.js@1.2.1/opencv.js';
+        script.src = 'https://docs.opencv.org/4.10.0/opencv.js?v=' + Date.now();
         script.async = true;
 
         script.onload = () => {
