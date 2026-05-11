@@ -315,14 +315,14 @@
 
     function loadOpenCV() {
         const script = document.createElement('script');
-        script.src = 'https://docs.opencv.org/4.10.0/opencv.js?v=' + Date.now();
+        // Используем зеркало Cloudflare + антикэш
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/opencv/4.10.0/opencv.js?v=' + Date.now();
         script.onload = () => {
-            document.getElementById('scan-hint').innerHTML = '📷 OpenCV загружен';
+            console.log("OpenCV загружен через CDN");
             onOpenCvReady();
         };
         script.onerror = () => {
-            document.getElementById('info').innerHTML = '❌ Не удалось загрузить OpenCV.js';
-            document.getElementById('scan-hint').innerHTML = '❌ Ошибка загрузки OpenCV';
+            document.getElementById('info').innerHTML = '❌ Ошибка загрузки CDN';
         };
         document.head.appendChild(script);
     }
