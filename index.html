@@ -77,7 +77,7 @@
                 
                 // Передаем эти настройки в запрос камеры   
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                
+
                 video.srcObject = stream;
                 document.getElementById('start-btn').style.display = 'none';
                 info.innerHTML = "🎥 Камера активна. Ищу маркеры...";
@@ -99,15 +99,19 @@
 
                 // Получаем данные пикселей
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                info.innerHTML = `🎥 ${canvas.width}x${canvas.height} | Ищу маркеры...`; // дебаг
             
                 // Ищем маркеры ArUco
                 const markers = detector.detect(imageData);
         
                 if (markers.length > 0) {
+                    // В библиотеке aruco_tiny обычно есть доступ к кандидатам,
+                    // но если нет, просто выведем статус
+                    if (Math.random() > 0.9) console.log("Кадр обработан, маркеров нет");
+                } else {    
                     drawMarkers(markers);
-                    info.innerHTML = `✅ Найден маркер ID: ${markers[0].id}`;
-                    // Тут будет твой запрос к базе данных
-                    console.log("Найден маркер:", markers[0].id);
+                    info.innerHTML = `✅ ID: ${markers[0].id} (Найдено: ${markers.length})`;
                 }
             }    
             requestAnimationFrame(processFrame);
