@@ -61,6 +61,9 @@
         const ctx = canvas.getContext('2d');
         const info = document.getElementById('info');
 
+        // Объявляем переменную
+        let isProcessing = false;
+
         // Создаем детектор
         const detector = new AR.Detector();
 
@@ -89,33 +92,42 @@
         }
 
         async function processFrame() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // Настраиваем размер холста под видео
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            
-                // Рисуем текущий кадр
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);    
+            if (video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
+                isProcessing = true; // Захватываем процесс
 
-                // Получаем данные пикселей
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                info.innerHTML = `🎥 ${canvas.width}x${canvas.height} | Ищу маркеры...`; // дебаг
+                try {
+                    // Настраиваем размер холста под видео
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
             
-                // Ищем маркеры ArUco
-                const markers = detector.detect(imageData);
+                    // Рисуем текущий кадр
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);    
+
+                    // Получаем данные пикселей
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+                    // Ищем маркеры ArUco
+                    const markers = detector.detect(imageData);
         
                 if (markers.length > 0) {
-                    // В библиотеке aruco_tiny обычно есть доступ к кандидатам,
-                    // но если нет, просто выведем статус
-                    if (Math.random() > 0.9) console.log("Кадр обработан, маркеров нет");
-                } else {    
                     drawMarkers(markers);
-                    info.innerHTML = `✅ ID: ${markers[0].id} (Найдено: ${markers.length})`;
-                }
-            }    
-            requestAnimationFrame(processFrame);
-        }    
+                    // Обновляем текст только при находке, чтобы не тормозить DOM
+                    info.innerText = `✅ ID: ${markers[0].id}`;
+                } else {
+                    // Чтобы видеть, что камера жива, добавим счетчик или время
+                    if (Math.random() > 0.95) {
+                        info.innerText = `🎥 Поиск... (${canvas.width}x${canvas.height})`;
+                    }
+                }    
+            } catch (e) {
+                console.error("Ошибка в цикле обработки:", e);
+            }
+
+            // Даем телефону передохнуть 30мс перед следующим кадром
+            setTimeout(() => { isProcessing = false; }, 30);
+        }
+        requestAnimationFrame(processFrame);
+    }           
             
         function drawMarkers(markers) {
             ctx.strokeStyle = "#00ff00";
