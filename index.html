@@ -16,13 +16,15 @@
             width: 100%;
             height: 100vh;
             object-fit: contain;
+            display: none;
         }
         canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
-            height: 100vh;
+            height: auto;
+            max-height: 100vh;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
         }
         #info {
             position: fixed;
@@ -64,9 +66,18 @@
 
         async function startCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" }  
-                });
+                // Создаем настройки с четким соотношением сторон 4:3
+                const constraints = {
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                };
+                
+                // Передаем эти настройки в запрос камеры   
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
                 video.srcObject = stream;
                 document.getElementById('start-btn').style.display = 'none';
                 info.innerHTML = "🎥 Камера активна. Ищу маркеры...";
