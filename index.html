@@ -1,368 +1,125 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Piet-AR</title>
+    <title>Piet-AR Scan</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="aruco_tiny.js"></script>
     <style>
         body {
             margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
-        }
-        #video-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
+            font-family: sans-serif;
             background: #000;
         }
-        video, canvas {
-            position: absolute;
+        #video {
             width: 100%;
-            height: 100%;
+            height: 100vh;
             object-fit: cover;
         }
         canvas {
-            z-index: 2;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
         }
         #info {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
+            position: fixed;
+            top: 10px;
+            left: 10px;
             background: rgba(0,0,0,0.7);
             color: white;
-            padding: 12px;
-            border-radius: 12px;
-            z-index: 3;
-            backdrop-filter: blur(10px);
-            font-size: 14px;
-            pointer-events: none;
-        }
-        #product-data {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 16px;
-            border-radius: 16px;
-            z-index: 3;
-            backdrop-filter: blur(10px);
-            display: none;
-            border-left: 4px solid #ff6600;
-            pointer-events: none;
-        }
-        .product-name {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        .product-price {
-            font-size: 28px;
-            color: #ffaa00;
-            font-weight: bold;
-        }
-        .product-composition {
-            font-size: 14px;
-            margin-top: 8px;
-            color: #ddd;
-        }
-        button {
-            pointer-events: auto;
-            background: #ff6600;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            color: white;
-            margin-top: 12px;
-            cursor: pointer;
-        }
-        .scan-hint {
-            position: absolute;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.6);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            z-index: 3;
-            white-space: nowrap;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
         }
         #start-btn {
-            position: absolute;
-            bottom: 30%;
+            position: fixed;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #ff6600;
-            color: white;
-            padding: 14px 28px;
+            padding: 15px 30px;
             font-size: 18px;
-            border: none;
-            border-radius: 40px;
-            z-index: 10;
+            z-index: 20;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            white-space: nowrap;
         }
     </style>
 </head>
 <body>
-<div id="video-container">
+
+    <div id="info">Ожидание запуска...</div>
+    <button id="start-btn" onclick="startCamera()">Включить камеру</button>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
-</div>
-<button id="start-btn" disabled>⌛ Загрузка библиотеки...</button>
-<div id="product-data">
-    <div class="product-name" id="product-name"></div>
-    <div class="product-price" id="product-price"></div>
-    <div class="product-composition" id="product-composition"></div>
-    <button onclick="window.open(document.getElementById('recipe-link').href, '_blank')" id="recipe-btn">📖 Рецепт</button>
-    <a id="recipe-link" href="#" target="_blank" style="display:none;"></a>
-</div>
-<div id="info">
-    🎯 Нажмите "Включить камеру"
-</div>
-<div class="scan-hint" id="scan-hint">
-    📷 Камера не запущена
-</div>
 
-<script type="text/javascript">
-    window.onerror = function(message, source, lineno, colno, error) {
-        alert("ОШИБКА: " + message + " на строке " + lineno);
-    };
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
 
-    let video = document.getElementById('video');
-    let canvas = document.getElementById('canvas');
-    let ctx = canvas.getContext('2d');
-    let lastDetectedId = -1;
-    let streaming = false;
-    let cvReady = false;
-    let detector = null;
-    let animationId = null;
-    let cap = null;
+        // Создаем детектор
+        const detector = new AR.Detector();
 
-    function initDetector() {
-        if (!cvReady) return false;
-        try {
-            // Проверка: есть ли вообще модуль ArUco в этой версии библиотеки
-            if (!cv.aruco) {
-                document.getElementById('scan-hint').innerHTML = '❌ Ошибка: В OpenCV нет модуля ArUco';
-                return false;
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }  
+                });
+                video.srcObject = stream;
+                document.getElementById('start-btn').style.display = 'none';
+                info.innerHTML = "🎥 Камера активна. Ищу маркеры...";
+            
+                requestAnimationFrame(processFrame);
+            } catch (err) {
+                info.innerHTML = "❌ Ошибка камеры: " + err;
             }
-
-            let dictionary = cv.getPredefinedDictionary(cv.DICT_4X4_50);
-            let parameters = new cv.aruco_DetectorParameters();
-
-            // 1. Позволяем находить более мелкие и размытые маркеры
-            parameters.minMarkerPerimeterRate = 0.02; // Стандарт 0.03, уменьшаем порог
-
-            // Возвращаем мягкую точность для плохих линз
-            parameters.polygonalApproxAccuracyRate = 0.05; // Стандарт 0.05
-            parameters.minDistanceToBorder = 0;
-
-            // 3. Улучшаем поиск в условиях теней
-            parameters.adaptiveThreshWinSizeMin = 3;
-            parameters.adaptiveThreshWinSizeMax = 23;
-            parameters.adaptiveThreshWinSizeStep = 10;
-
-            detector = new cv.aruco_ArucoDetector(dictionary, parameters);
-            console.log("✅ Детектор создан");
-            return true;
-        } catch(e) {
-            // Если детектор не создался, мы увидим почему
-            document.getElementById('scan-hint').innerHTML = `❌ Ошибка инициализации: ${e.message}`;
-            console.error(e);
-            return false;
-        }
-    }
-
-    async function startCamera() {
-        // Проверка на наличие OpenCV перед любым действием
-        if (typeof cv === 'undefined') {
-            alert("Библиотека OpenCV еще загружается. Пожалуйста, подождите.");
-            return;
         }
 
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: {
-                    facingMode: "environment",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                }    
-            });
-            video.srcObject = stream;
+        async function processFrame() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Настраиваем размер холста под видео
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
             
-            await video.play();
+                // Рисуем текущий кадр
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);    
 
-            // Инициализируем захват кадров OpenCV один раз здесь
-            cap = new cv.VideoCapture(video);
-
-            streaming = true;
+                // Получаем данные пикселей
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             
-            // Скрываем кнопку старта
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('info').innerHTML = '🎥 Камера работает';
-            document.getElementById('scan-hint').innerHTML = '🔍 Инициализация потока...';
-
-            // Даем браузеру 300мс, чтобы точно определились videoWidth и videoHeight
-            setTimeout(() => {
-                if (animationId) cancelAnimationFrame(animationId);
-                processFrame();
-            }, 300);    
-            
-        } catch(err) {
-            document.getElementById('info').innerHTML = '❌ Ошибка камеры: ' + err.message;
-            document.getElementById('scan-hint').innerHTML = '❌ Доступ запрещен';
-            console.error(err);
-        }
-    }
-
-    async function processFrame() {
-        // Если чего-то не хватает, пишем об этом прямо на экран
-        if (!cvReady) { document.getElementById('scan-hint').innerHTML = '⌛ Жду OpenCV...'; return; }
-        if (!streaming) { document.getElementById('scan-hint').innerHTML = '⌛ Жду Камеру...'; return; }
-
-        // Попытка переинициализации, если детектор еще не готов
-        if (!detector) {
-            if (!initDetector()) return;
-        }    
-
-        let image = null;
-        let gray = null;
-        let corners = null;
-        let ids = null;
+                // Ищем маркеры ArUco
+                const markers = detector.detect(imageData);
         
-        try {
-            // Если видео еще не готово, пропускаем кадр
-            if (video.videoWidth === 0 || video.videoHeight === 0) {
-                animationId = requestAnimationFrame(processFrame);
-                return;
-            }
-
-            image = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-            cap.read(image);
-            
-            // Уменьшаем до 640x480 для скорости
-            let dsize = new cv.Size(640, 480);
-            cv.resize(image, image, dsize, 0, 0, cv.INTER_AREA);
-
-            gray = new cv.Mat();
-            cv.cvtColor(image, gray, cv.COLOR_RGBA2GRAY);
-
-            // Инициализируем только ОДИН раз
-            corners = new cv.MatVector();
-            ids = new cv.Mat();
-
-            // 1. Сначала запускаем поиск
-            detector.detectMarkers(gray, corners, ids);
-
-            // 2. БЛОК ДЕБАГА
-            let statusText = `Углов (кандидатов): ${corners.size()}`;
-
-            if (ids && ids.rows > 0) {
-                let markerId = ids.getIntAt(0, 0);
-                statusText = `🎯 ID: ${markerId} | Углов: ${corners.size()}`;
-
-                // Отрисовка рамки вокруг маркера
-                cv.aruco.drawDetectedMarkers(image, corners, ids);
-
-                if (markerId !== lastDetectedId) {
-                    lastDetectedId = markerId;
-                    fetchData(markerId);
+                if (markers.length > 0) {
+                    drawMarkers(markers);
+                    info.innerHTML = `✅ Найден маркер ID: ${markers[0].id}`;
+                    // Тут будет твой запрос к базе данных
+                    console.log("Найден маркер:", markers[0].id);
                 }
-            }
-            
-            // Обновляем текст на экране телефона
-            document.getElementById('scan-hint').innerHTML = statusText;
-
-            // 3. ВЫВОДИМ КАРТИНКУ НА ЭКРАН
-            cv.imshow(canvas, image);
-
-        } catch(e) {
-            // Если будет ошибка, мы ее увидим на телефоне!
-            document.getElementById('scan-hint').innerHTML = `❌ Ошибка: ${e.message}`;
-            console.error(e);
-        } finally {
-            // Обязательная чистка
-            if (image) image.delete();
-            if (gray) gray.delete();
-            if (corners) corners.delete();
-            if (ids) ids.delete();
-        }
-
-        animationId = requestAnimationFrame(processFrame);
-    }
-
-    function onOpenCvReady() {
-        cvReady = true;
-        initDetector();
-
-        // Активируем кнопку только когда библиотека полностью готова
-        const btn = document.getElementById('start-btn');
-        btn.disabled = false;
-        btn.innerText = '🎥 Включить камеру';
-
-        if (streaming && !animationId) {
-            processFrame();
+            }    
+            requestAnimationFrame(processFrame);
         }    
-        document.getElementById('scan-hint').innerHTML = '📷 Библиотека готова';
-    }
-
-        function loadOpenCV() {
-            const script = document.createElement('script');
-            // Прямая ссылка на полную версию 4.13.0
-            script.src = 'https://docs.opencv.org/4.13.0/opencv.js';
-            script.async = true;
-
-            script.onload = () => {
-                // Проверяем наличие модуля ArUco через небольшую паузу
-                setTimeout(() => {
-                    if (typeof cv !== 'undefined' && cv.aruco) {
-                        console.log("✅ OpenCV 4.13.0 с ArUco успешно загружен");
-                        onOpenCvReady();
-                    } else {    
-                        document.getElementById('info').innerHTML = '❌ В этой версии нет ArUco. Нужно искать другой файл.';
-                    }
-                }, 1000);
-            };  
-
-            script.onerror = () => {
-                document.getElementById('info').innerHTML = '❌ Ошибка сети (возможно, нужен VPN)';
-            };
             
-            document.head.appendChild(script);
-        }    
-
-    async function fetchData(markerId) {
-        try {
-            // Используем полный URL твоего бэкенда на Render
-            let response = await fetch(`https://piet-ar.onrender.com/api/product/${markerId}`);
-            if (response.ok) {
-                let product = await response.json();
-
-                // Заполняем поля данными из JSON
-                document.getElementById('product-name').innerText = product.name;
-                document.getElementById('product-price').innerText = product.price + ' ₽';
-                document.getElementById('product-composition').innerText = 'Состав: ' + product.composition;
-                document.getElementById('recipe-link').href = product.recipe_url;
-
-                // Показываем карточку товара
-                document.getElementById('product-data').style.display = 'block';
-            } else {
-                console.error("Товар не найден в базе");
-            }
-        } catch(e) {
-            console.error('Ошибка сети или сервера:', e);
-        }
-    }            
-
-    document.getElementById('start-btn').addEventListener('click', startCamera);
-    loadOpenCV();
-</script>
+        function drawMarkers(markers) {
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 4;
+            markers.forEach(marker => {
+                ctx.beginPath();
+                marker.corners.forEach((corner, index) => {
+                    if (index === 0) ctx.moveTo(corner.x, corner.y);
+                    else ctx.lineTo(corner.x, corner.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+            
+                // Пишем ID над маркером
+                ctx.fillStyle = "#00ff00";
+                ctx.font = "20px Arial";
+                ctx.fillText("ID: " + marker.id, marker.corners[0].x, marker.corners[0].y - 10);
+            });    
+        }           
+    </script>
 </body>
 </html>
