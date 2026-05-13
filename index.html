@@ -66,7 +66,7 @@
 
         // Создаем детектор
         const detector = new AR.Detector({
-            threshold: 100 // Можно поиграть со значениями от 80 до 120
+            threshold: 110 // Можно поиграть со значениями от 80 до 120
         });    
 
         async function startCamera() {
@@ -111,25 +111,43 @@
                     // Ищем маркеры ArUco
                     const markers = detector.detect(imageData);
         
-                if (markers.length > 0) {
-                    drawMarkers(markers);
-                    // Обновляем текст только при находке, чтобы не тормозить DOM
-                    info.innerText = `✅ ID: ${markers[0].id}`;
-                } else {
-                    // Чтобы видеть, что камера жива, добавим счетчик или время
-                    if (Math.random() > 0.95) {
-                        info.innerText = `🎥 Поиск... (${canvas.width}x${canvas.height})`;
-                    }
-                }    
-            } catch (e) {
-                console.error("Ошибка в цикле обработки:", e);
-            }
+                    if (markers.length > 0) {
+                        drawMarkers(markers);
+                        // Обновляем текст только при находке, чтобы не тормозить DOM
+                        info.innerText = `✅ ID: ${markers[0].id}`;
+                    } else {
+                        // ДЕБАГ: Рисуем кандидатов красным, если маркер не распознан
+                        drawCandidates(detector.candidates);
 
-            // Даем телефону передохнуть 30мс перед следующим кадром
-            setTimeout(() => { isProcessing = false; }, 30);
+                        // Чтобы видеть, что камера жива, добавим счетчик или время
+                        if (Math.random() > 0.9) {
+                            info.innerText = "🎥 Поиск... (" + canvas.width + "x" + canvas.height + ")";
+                        }
+                    }    
+                } catch (e) {
+                    console.error(e);
+                }
+
+                // Даем телефону передохнуть 30мс перед следующим кадром
+                setTimeout(() => { isProcessing = false; }, 30);
+            }
+            requestAnimationFrame(processFrame);
         }
-        requestAnimationFrame(processFrame);
-    }           
+        
+        function drawCandidates(candidates) {
+            if (!candidates) return;
+            ctx.strokeStyle = "#ff0000"; // Красный для кандидатов
+            ctx.lineWidth = 2;
+            candidates.forEach(cand => {
+                ctx.beginPath();
+                cand.forEach((c, i) => {
+                    if (i === 0) ctx.moveTo(c.x, c.y);
+                    else ctx.lineTo(c.x, c.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+            });
+        }            
             
         function drawMarkers(markers) {
             ctx.strokeStyle = "#00ff00";
