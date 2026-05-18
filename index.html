@@ -67,8 +67,7 @@
 
         // Создаем детектор с более мягким порогом для темноты
         const detector = new AR.Detector({
-            threshold: 40,         // Очень низкий порог, чтобы отличить серый от черного
-            minSize: 0.02          // Позволяем искать даже маленькие маркеры в кадре
+            minSize: 0.02 // Ищет даже небольшие квадраты в кадре
         });    
 
         async function startCamera() {
@@ -110,12 +109,9 @@
                     // Настраиваем размер холста под видео
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-            
-                    ctx.filter = 'contrast(150%) brightness(120%)';
 
                     // Рисуем текущий кадр
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height); 
-                    ctx.filter = 'none';
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
                     // Получаем данные пикселей
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
