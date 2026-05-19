@@ -4,7 +4,8 @@
     <title>Piet-AR Scan</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="aruco_tiny.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsaruco@1.0.0/src/svcl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsaruco@1.0.0/src/aruco.js"></script>
     <style>
         body {
             margin: 0;
@@ -61,25 +62,21 @@
         const ctx = canvas.getContext('2d');
         const info = document.getElementById('info');
 
-        // Объявляем переменную
         let isProcessing = false;
         let frameCount = 0;
-
-        // Создаем детектор с более мягким порогом для темноты
-        const detector = new AR.Detector({
-            dictionaryName: "DICT_4X4_50",
-            minSize: 0.02 // Ищет даже небольшие квадраты в кадре
-        });    
+        let detector;
 
         async function startCamera() {
-            // ПРОВЕРКА: Загрузился ли детектор вообще
-            if (typeof AR === 'undefined') {
-                info.innerHTML = "❌ Ошибка: aruco_tiny.js не загружен!";
+            // Проверяем, загрузилась ли новая библиотека
+            if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
+                info.innerHTML = "❌ Ошибка: библиотека jsaruco не загрузилась!";
                 return;
             }
 
+            // Инициализируем детектор jsaruco
+            detector = new AR.Detector();
+
             try {
-                // Создаем настройки с четким соотношением сторон 4:3
                 const constraints = {
                     video: {
                         facingMode: "environment",
@@ -88,12 +85,10 @@
                     }
                 };
                 
-                // Передаем эти настройки в запрос камеры   
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
                 video.srcObject = stream;
                 document.getElementById('start-btn').style.display = 'none';
-                info.innerHTML = "🎥 Камера активна. Ищу маркеры...";
+                info.innerHTML = "🎥 Камера готова. Ищу оригинальные маркеры (5x5)...";
             
                 requestAnimationFrame(processFrame);
             } catch (err) {
@@ -103,30 +98,25 @@
 
         async function processFrame() {
             if (video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
-                isProcessing = true; // Захватываем процесс
+                isProcessing = true;
                 frameCount++;
 
                 try {
-                    // Настраиваем размер холста под видео
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-
-                    // Рисуем текущий кадр
+                    
+                    // Рисуем чистый кадр
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    // Получаем данные пикселей
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     
-                    // Ищем маркеры ArUco
+                    // Вызываем детекцию в формате jsaruco
                     const markers = detector.detect(imageData);
         
                     if (markers.length > 0) {
                         drawMarkers(markers);
-                        // Обновляем текст только при находке, чтобы не тормозить DOM
-                        info.innerText = `✅ ID: ${markers[0].id}`;
+                        info.innerText = "✅ ID: " + markers[0].id;
                     } else {
-                        // ДЕБАГ: Рисуем кандидатов красным, если маркер не распознан
-                        drawCandidates(detector.candidates);
                         if (frameCount % 30 === 0) {
                             info.innerText = "🔍 Поиск... Кадр: " + frameCount;
                         }
@@ -135,27 +125,11 @@
                     console.error(e);
                 }
 
-                // Даем телефону передохнуть 30мс перед следующим кадром
                 setTimeout(() => { isProcessing = false; }, 30);
             }
             requestAnimationFrame(processFrame);
         }
         
-        function drawCandidates(candidates) {
-            if (!candidates) return;
-            ctx.strokeStyle = "#ff0000"; // Красный для кандидатов
-            ctx.lineWidth = 2;
-            candidates.forEach(cand => {
-                ctx.beginPath();
-                cand.forEach((c, i) => {
-                    if (i === 0) ctx.moveTo(c.x, c.y);
-                    else ctx.lineTo(c.x, c.y);
-                });
-                ctx.closePath();
-                ctx.stroke();
-            });
-        }            
-            
         function drawMarkers(markers) {
             ctx.strokeStyle = "#00ff00";
             ctx.lineWidth = 4;
@@ -168,7 +142,6 @@
                 ctx.closePath();
                 ctx.stroke();
             
-                // Пишем ID над маркером
                 ctx.fillStyle = "#00ff00";
                 ctx.font = "20px Arial";
                 ctx.fillText("ID: " + marker.id, marker.corners[0].x, marker.corners[0].y - 10);
