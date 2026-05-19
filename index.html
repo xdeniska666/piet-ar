@@ -67,6 +67,7 @@
 
         // Создаем детектор с более мягким порогом для темноты
         const detector = new AR.Detector({
+            dictionaryName: "DICT_4X4_50",
             minSize: 0.02 // Ищет даже небольшие квадраты в кадре
         });    
 
