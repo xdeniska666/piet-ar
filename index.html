@@ -1,98 +1,331 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Piet-AR Scan</title>
+    <title>Piet-AR Scan | Core</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Подключаем премиальный шрифт Outfit и Roboto Mono для технической информации -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- JS-библиотека jsaruco -->
     <script src="https://cdn.jsdelivr.net/npm/jsaruco@1.0.0/src/svcl.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsaruco@1.0.0/src/aruco.js"></script>
+    
     <style>
+        :root {
+            --primary: #00f3ff;
+            --primary-glow: rgba(0, 243, 255, 0.4);
+            --success: #00ff87;
+            --success-glow: rgba(0, 255, 135, 0.4);
+            --bg: #08090f;
+            --surface: rgba(13, 16, 27, 0.65);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --text: #f0f3f8;
+            --text-muted: #8a99ad;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
         body {
             margin: 0;
+            padding: 0;
             overflow: hidden;
-            font-family: sans-serif;
-            background: #000;
-        }
-        #video {
-            width: 100%;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
             height: 100vh;
-            object-fit: contain;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Видеоэлемент скрыт, рендерим через Canvas */
+        #video {
             display: none;
         }
+
+        /* Полноэкранный холст для камеры и AR эффектов */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+
         canvas {
             width: 100%;
-            height: auto;
-            max-height: 100vh;
-            object-fit: contain;
+            height: 100%;
+            object-fit: cover;
             display: block;
+        }
+
+        /* Интерфейсная панель управления (сверху) */
+        #header-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            padding: 16px 24px;
+            border-radius: 16px;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            max-width: 600px;
             margin: 0 auto;
         }
-        #info {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 10;
+
+        .brand-info {
+            display: flex;
+            flex-direction: column;
         }
+
+        .brand-title {
+            font-weight: 800;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #00f3ff, #00ff87);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'Roboto Mono', monospace;
+            margin-top: 2px;
+        }
+
+        /* Панель статуса и отладки (снизу) */
+        #status-panel {
+            position: absolute;
+            bottom: 24px;
+            left: 20px;
+            right: 20px;
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            padding: 20px;
+            border-radius: 20px;
+            z-index: 10;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ff3838;
+            box-shadow: 0 0 8px #ff3838;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.active {
+            background-color: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        .status-dot.detected {
+            background-color: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse-success 0.8s infinite alternate;
+        }
+
+        .status-text {
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .debug-info {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Кнопка запуска с неоновым свечением */
         #start-btn {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 15px 30px;
-            font-size: 18px;
-            z-index: 20;
+            position: absolute;
+            padding: 16px 36px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--bg);
+            background: linear-gradient(135deg, var(--primary), var(--success));
+            border: none;
+            border-radius: 30px;
             cursor: pointer;
+            z-index: 20;
+            box-shadow: 0 4px 20px var(--primary-glow);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-family: 'Outfit', sans-serif;
+            text-transform: uppercase;
+        }
+
+        #start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 30px var(--success-glow);
+        }
+
+        #start-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Направляющая рамка прицела в центре */
+        #reticle-overlay {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border: 2px dashed rgba(0, 243, 255, 0.3);
+            border-radius: 24px;
+            z-index: 5;
+            pointer-events: none;
+            display: none;
+            transition: all 0.3s ease;
+        }
+
+        #reticle-overlay::before, #reticle-overlay::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: var(--primary);
+            border-style: solid;
+        }
+
+        /* Анимации */
+        @keyframes pulse {
+            0% { opacity: 0.6; box-shadow: 0 0 4px var(--primary); }
+            100% { opacity: 1; box-shadow: 0 0 12px var(--primary); }
+        }
+
+        @keyframes pulse-success {
+            0% { opacity: 0.6; box-shadow: 0 0 4px var(--success); }
+            100% { opacity: 1; box-shadow: 0 0 14px var(--success); }
         }
     </style>
 </head>
 <body>
 
-    <div id="info">Ожидание запуска...</div>
-    <button id="start-btn" onclick="startCamera()">Включить камеру</button>
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
+    <!-- Шапка приложения -->
+    <div id="header-panel">
+        <div class="brand-info">
+            <span class="brand-title">Piet-AR Core</span>
+            <span class="brand-subtitle">Status: ARUCO_5X5_DETECTOR</span>
+        </div>
+    </div>
+
+    <!-- Кнопка запуска -->
+    <button id="start-btn" onclick="startCamera()">Активировать камеру</button>
+    
+    <!-- Направляющий прицел по центру -->
+    <div id="reticle-overlay"></div>
+
+    <!-- Контейнер для отображения потока -->
+    <div id="canvas-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Нижняя панель статуса -->
+    <div id="status-panel">
+        <div class="status-header">
+            <div id="status-indicator" class="status-dot"></div>
+            <div id="status-message" class="status-text">Ожидание инициализации...</div>
+        </div>
+        <div class="debug-info">
+            <span id="fps-counter">FPS: --</span>
+            <span id="res-counter">Разрешение: --</span>
+        </div>
+    </div>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const info = document.getElementById('info');
+        const statusMessage = document.getElementById('status-message');
+        const statusIndicator = document.getElementById('status-indicator');
+        const fpsCounter = document.getElementById('fps-counter');
+        const resCounter = document.getElementById('res-counter');
+        const reticle = document.getElementById('reticle-overlay');
+        const startBtn = document.getElementById('start-btn');
 
         let isProcessing = false;
+        let lastFrameTime = performance.now();
         let frameCount = 0;
+        let fps = 0;
         let detector;
 
         async function startCamera() {
-            // Проверяем, загрузилась ли новая библиотека
+            // Проверка загрузки библиотеки jsaruco
             if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
-                info.innerHTML = "❌ Ошибка: библиотека jsaruco не загрузилась!";
+                statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!";
+                statusMessage.style.color = "#ff3838";
                 return;
             }
 
-            // Инициализируем детектор jsaruco
+            // Инициализируем детектор
             detector = new AR.Detector();
 
             try {
                 const constraints = {
                     video: {
                         facingMode: "environment",
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
+                        width: { ideal: 1280 }, // Пробуем запросить HD
+                        height: { ideal: 720 }
                     }
                 };
                 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
-                document.getElementById('start-btn').style.display = 'none';
-                info.innerHTML = "🎥 Камера готова. Ищу оригинальные маркеры (5x5)...";
-            
+                
+                // Скрываем кнопку
+                startBtn.style.display = 'none';
+                reticle.style.display = 'block';
+                
+                statusIndicator.className = 'status-dot active';
+                statusMessage.innerText = "Инициализация видеопотока...";
+                
+                // Запускаем цикл рендеринга
                 requestAnimationFrame(processFrame);
             } catch (err) {
-                info.innerHTML = "❌ Ошибка камеры: " + err;
+                statusMessage.innerHTML = "❌ Ошибка камеры: " + err.message;
+                statusMessage.style.color = "#ff3838";
             }
         }
 
@@ -101,50 +334,109 @@
                 isProcessing = true;
                 frameCount++;
 
+                // Расчет FPS
+                const now = performance.now();
+                const delta = now - lastFrameTime;
+                if (delta >= 1000) {
+                    fps = Math.round((frameCount * 1000) / delta);
+                    fpsCounter.innerText = `FPS: ${fps}`;
+                    frameCount = 0;
+                    lastFrameTime = now;
+                }
+
                 try {
+                    // Подстраиваем размеры холста под соотношение сторон видео
+                    const containerWidth = canvas.parentElement.clientWidth;
+                    const containerHeight = canvas.parentElement.clientHeight;
+                    
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    
-                    // Рисуем чистый кадр
+                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
+
+                    // Отрисовываем кадр камеры на холст
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
+                    // Захватываем пиксели для анализа
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     
-                    // Вызываем детекцию в формате jsaruco
+                    // Производим детекцию
                     const markers = detector.detect(imageData);
         
                     if (markers.length > 0) {
-                        drawMarkers(markers);
-                        info.innerText = "✅ ID: " + markers[0].id;
+                        statusIndicator.className = 'status-dot detected';
+                        statusMessage.innerText = `✅ Найден маркер ID: ${markers[0].id}`;
+                        statusMessage.style.color = 'var(--success)';
+                        reticle.style.borderColor = 'var(--success)';
+                        
+                        // Рисуем стильный контур сканера
+                        drawGlowingOutline(markers);
                     } else {
-                        if (frameCount % 30 === 0) {
-                            info.innerText = "🔍 Поиск... Кадр: " + frameCount;
-                        }
+                        statusIndicator.className = 'status-dot active';
+                        statusMessage.innerText = "Сканирование... Наведите на ЧБ маркер 5x5";
+                        statusMessage.style.color = 'var(--text)';
+                        reticle.style.borderColor = 'rgba(0, 243, 255, 0.3)';
                     }    
                 } catch (e) {
                     console.error(e);
                 }
 
+                // Задержка 30мс для разгрузки процессора (~30 кадров в секунду для AI)
                 setTimeout(() => { isProcessing = false; }, 30);
             }
             requestAnimationFrame(processFrame);
         }
         
-        function drawMarkers(markers) {
-            ctx.strokeStyle = "#00ff00";
-            ctx.lineWidth = 4;
+        function drawGlowingOutline(markers) {
             markers.forEach(marker => {
+                const corners = marker.corners;
+                
+                // 1. Рисуем полупрозрачную светящуюся заливку маркера
+                ctx.fillStyle = "rgba(0, 255, 135, 0.15)";
                 ctx.beginPath();
-                marker.corners.forEach((corner, index) => {
-                    if (index === 0) ctx.moveTo(corner.x, corner.y);
-                    else ctx.lineTo(corner.x, corner.y);
-                });
+                ctx.moveTo(corners[0].x, corners[0].y);
+                for (let i = 1; i < 4; i++) {
+                    ctx.lineTo(corners[i].x, corners[i].y);
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // 2. Рисуем неоновую обводку ребер
+                ctx.strokeStyle = "var(--success)";
+                ctx.lineWidth = 4;
+                ctx.shadowColor = "rgba(0, 255, 135, 0.8)";
+                ctx.shadowBlur = 15;
+                
+                ctx.beginPath();
+                ctx.moveTo(corners[0].x, corners[0].y);
+                for (let i = 1; i < 4; i++) {
+                    ctx.lineTo(corners[i].x, corners[i].y);
+                }
                 ctx.closePath();
                 ctx.stroke();
-            
-                ctx.fillStyle = "#00ff00";
-                ctx.font = "20px Arial";
-                ctx.fillText("ID: " + marker.id, marker.corners[0].x, marker.corners[0].y - 10);
+                
+                // Сбрасываем тени, чтобы не тормозило дальше
+                ctx.shadowBlur = 0;
+
+                // 3. Рисуем круги-узлы по углам
+                ctx.fillStyle = "#ffffff";
+                corners.forEach(corner => {
+                    ctx.beginPath();
+                    ctx.arc(corner.x, corner.y, 6, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.strokeStyle = "var(--success)";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+
+                // 4. Пишем ID над маркером с красивым фоном
+                const textX = corners[0].x;
+                const textY = corners[0].y - 15;
+                ctx.fillStyle = "rgba(13, 16, 27, 0.85)";
+                ctx.fillRect(textX - 5, textY - 20, 80, 26);
+                
+                ctx.fillStyle = "var(--success)";
+                ctx.font = "bold 14px 'Outfit', sans-serif";
+                ctx.fillText(`AR ID: ${marker.id}`, textX, textY - 2);
             });    
         }           
     </script>
