@@ -8,9 +8,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        window.loadErrors = [];
+        window.addEventListener('error', function(e) {
+            window.loadErrors.push(e.message + ' (в ' + (e.filename ? e.filename.split('/').pop() : 'unknown') + ':' + e.lineno + ')');
+        }, true);
+    </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js"></script>
+    <script src="/aruco_tiny.js?v=3" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -294,7 +300,10 @@
         async function startCamera() {
             // Проверка загрузки библиотеки jsaruco
             if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
-                statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!";
+                let errorDetails = (window.loadErrors && window.loadErrors.length > 0) 
+                    ? "<br><small style='font-size:0.75rem;color:#ffa0a0;font-family:monospace;display:block;margin-top:5px;line-height:1.2;'>" + window.loadErrors.join("<br>") + "</small>" 
+                    : "<br><small style='font-size:0.75rem;color:#ffa0a0;display:block;margin-top:5px;'>Причина: Файл не загрузился (кэш браузера) или сбой инициализации</small>";
+                statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!" + errorDetails;
                 statusMessage.style.color = "#ff3838";
                 return;
             }

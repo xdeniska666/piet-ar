@@ -49,7 +49,11 @@ func main() {
 	// Используем HandleFunc, чтобы корень "/" отдавал index.html,
 	// но не мешал другим путям
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Если это не API, пробуем отдать файл из папки
+		// Отключаем кэширование для статических файлов, чтобы мобильные устройства всегда загружали свежую версию
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		
 		fs.ServeHTTP(w, r)
 	})
 
