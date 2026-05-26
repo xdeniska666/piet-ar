@@ -16,7 +16,7 @@
     </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js?v=5" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
+    <script src="/aruco_tiny.js?v=6" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -358,19 +358,23 @@
                 }
 
                 try {
-                    // Подстраиваем размеры основного холста под соотношение сторон видео
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    // Подстраиваем размеры основного холста под соотношение сторон видео (только при изменении разрешения)
+                    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                    }
                     resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight} | Детекция: --ms`;
 
                     // Отрисовываем кадр камеры на основной холст для пользователя
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    // Задаем уменьшенный размер для оптимизации детекции (ширина 240px)
+                    // Задаем уменьшенный размер для оптимизации детекции (ширина 240px) (только при изменении разрешения)
                     const detectWidth = 240;
                     const detectHeight = Math.round(240 * (video.videoHeight / video.videoWidth));
-                    detectCanvas.width = detectWidth;
-                    detectCanvas.height = detectHeight;
+                    if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
+                        detectCanvas.width = detectWidth;
+                        detectCanvas.height = detectHeight;
+                    }
 
                     // Отрисовываем уменьшенный кадр на скрытый холст
                     detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
