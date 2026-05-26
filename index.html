@@ -16,7 +16,7 @@
     </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js?v=7" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
+    <script src="/aruco_tiny.js?v=8" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -329,8 +329,8 @@
                 const constraints = {
                     video: {
                         facingMode: "environment",
-                        width: { ideal: 1280 }, // Пробуем запросить HD
-                        height: { ideal: 720 }
+                        width: { ideal: 640, max: 640 },
+                        height: { ideal: 480, max: 480 }
                     }
                 };
                 
@@ -368,64 +368,53 @@
                 }
 
                 try {
-                    // Подстраиваем размеры основного холста под соотношение сторон видео (только при изменении разрешения)
-                    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                    }
+                    const vw = video.videoWidth;
+                    const vh = video.videoHeight;
 
-                    // Очищаем прозрачный холст перед рисованием графики поверх видео
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    
-                    // Задаем уменьшенный размер для оптимизации детекции (ширина 240px) (только при изменении разрешения)
+                    // Устанавливаем размер холста для детектора (240px) только при изменении
                     const detectWidth = 240;
-                    const detectHeight = Math.round(240 * (video.videoHeight / video.videoWidth));
-                    if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
-                        detectCanvas.width = detectWidth;
-                        detectCanvas.height = detectHeight;
+                    const detectHeight = Math.round(240 * (vh / vw));
+                    if (canvas.width !== detectWidth || canvas.height !== detectHeight) {
+                        canvas.width = detectWidth;
+                        canvas.height = detectHeight;
                     }
 
-                    // Отрисовываем уменьшенный кадр на скрытый холст с замером времени
+                    // Очищаем прозрачный холст (только графика поверх видео-тега)
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Рисуем уменьшенный кадр на скрытый холст
                     const tDrawStart = performance.now();
                     detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
-                    const tDrawEnd = performance.now();
-                    
-                    // Захватываем пиксели с уменьшенного холста с замером времени
+                    const drawTime = Math.round(performance.now() - tDrawStart);
+
+                    // Захватываем пиксели
                     const tGetStart = performance.now();
                     const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
-                    const tGetEnd = performance.now();
-                    
-                    // Производим детекцию с замером времени
+                    const getTime = Math.round(performance.now() - tGetStart);
+
+                    // Детекция
                     const tDetectStart = performance.now();
                     const markers = detector.detect(imageData);
-                    const tDetectEnd = performance.now();
-                    
-                    const drawTime = Math.round(tDrawEnd - tDrawStart);
-                    const getTime = Math.round(tGetEnd - tGetStart);
-                    const detectTime = Math.round(tDetectEnd - tDetectStart);
-                    
-                    resCounter.innerHTML = `Cam: ${video.videoWidth}x${video.videoHeight} | Draw: ${drawTime}ms | Get: ${getTime}ms | Detect: ${detectTime}ms`;
-        
+                    const detectTime = Math.round(performance.now() - tDetectStart);
+
+                    resCounter.innerHTML = `Cam: ${vw}x${vh} | Draw: ${drawTime}ms | Get: ${getTime}ms | Det: ${detectTime}ms`;
+
                     if (markers.length > 0) {
                         statusIndicator.className = 'status-dot detected';
                         statusMessage.innerText = `✅ Найден маркер ID: ${markers[0].id}`;
                         statusMessage.style.color = 'var(--success)';
                         reticle.style.borderColor = 'var(--success)';
-                        
-                        // Пересчитываем координаты под размер основного холста
-                        const scaleX = canvas.width / detectWidth;
-                        const scaleY = canvas.height / detectHeight;
-                        const scaledMarkers = markers.map(m => {
-                            return {
-                                id: m.id,
-                                corners: m.corners.map(c => ({
-                                    x: c.x * scaleX,
-                                    y: c.y * scaleY
-                                }))
-                            };
-                        });
 
-                        // Рисуем стильный контур сканера с масштабированными координатами
+                        // Пересчитываем координаты под экран
+                        const scaleX = vw / detectWidth;
+                        const scaleY = vh / detectHeight;
+                        const scaledMarkers = markers.map(m => ({
+                            id: m.id,
+                            corners: m.corners.map(c => ({
+                                x: c.x * scaleX,
+                                y: c.y * scaleY
+                            }))
+                        }));
                         drawGlowingOutline(scaledMarkers);
                     } else {
                         statusIndicator.className = 'status-dot active';
