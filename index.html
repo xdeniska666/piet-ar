@@ -16,7 +16,7 @@
     </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js?v=4" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
+    <script src="/aruco_tiny.js?v=5" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -361,14 +361,14 @@
                     // Подстраиваем размеры основного холста под соотношение сторон видео
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
+                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight} | Детекция: --ms`;
 
                     // Отрисовываем кадр камеры на основной холст для пользователя
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    // Задаем уменьшенный размер для оптимизации детекции (ширина 360px)
-                    const detectWidth = 360;
-                    const detectHeight = Math.round(360 * (video.videoHeight / video.videoWidth));
+                    // Задаем уменьшенный размер для оптимизации детекции (ширина 240px)
+                    const detectWidth = 240;
+                    const detectHeight = Math.round(240 * (video.videoHeight / video.videoWidth));
                     detectCanvas.width = detectWidth;
                     detectCanvas.height = detectHeight;
 
@@ -378,8 +378,13 @@
                     // Захватываем пиксели с уменьшенного холста
                     const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
                     
-                    // Производим детекцию
+                    // Производим детекцию с замером времени
+                    const t0 = performance.now();
                     const markers = detector.detect(imageData);
+                    const t1 = performance.now();
+                    const detectTime = Math.round(t1 - t0);
+                    
+                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight} | Детекция: ${detectTime}ms`;
         
                     if (markers.length > 0) {
                         statusIndicator.className = 'status-dot detected';
