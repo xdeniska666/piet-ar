@@ -16,7 +16,7 @@
     </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js?v=3" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
+    <script src="/aruco_tiny.js?v=4" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -296,6 +296,10 @@
         let frameCount = 0;
         let fps = 0;
         let detector;
+        
+        // Скрытый холст для оптимизации детекции (снижает нагрузку на CPU/GPU)
+        const detectCanvas = document.createElement('canvas');
+        const detectCtx = detectCanvas.getContext('2d');
 
         async function startCamera() {
             // Проверка загрузки библиотеки jsaruco
@@ -354,19 +358,25 @@
                 }
 
                 try {
-                    // Подстраиваем размеры холста под соотношение сторон видео
-                    const containerWidth = canvas.parentElement.clientWidth;
-                    const containerHeight = canvas.parentElement.clientHeight;
-                    
+                    // Подстраиваем размеры основного холста под соотношение сторон видео
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
 
-                    // Отрисовываем кадр камеры на холст
+                    // Отрисовываем кадр камеры на основной холст для пользователя
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    // Захватываем пиксели для анализа
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    // Задаем уменьшенный размер для оптимизации детекции (ширина 360px)
+                    const detectWidth = 360;
+                    const detectHeight = Math.round(360 * (video.videoHeight / video.videoWidth));
+                    detectCanvas.width = detectWidth;
+                    detectCanvas.height = detectHeight;
+
+                    // Отрисовываем уменьшенный кадр на скрытый холст
+                    detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
+                    
+                    // Захватываем пиксели с уменьшенного холста
+                    const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
                     
                     // Производим детекцию
                     const markers = detector.detect(imageData);
@@ -377,8 +387,21 @@
                         statusMessage.style.color = 'var(--success)';
                         reticle.style.borderColor = 'var(--success)';
                         
-                        // Рисуем стильный контур сканера
-                        drawGlowingOutline(markers);
+                        // Пересчитываем координаты под размер основного холста
+                        const scaleX = canvas.width / detectWidth;
+                        const scaleY = canvas.height / detectHeight;
+                        const scaledMarkers = markers.map(m => {
+                            return {
+                                id: m.id,
+                                corners: m.corners.map(c => ({
+                                    x: c.x * scaleX,
+                                    y: c.y * scaleY
+                                }))
+                            };
+                        });
+
+                        // Рисуем стильный контур сканера с масштабированными координатами
+                        drawGlowingOutline(scaledMarkers);
                     } else {
                         statusIndicator.className = 'status-dot active';
                         statusMessage.innerText = "Сканирование... Наведите на ЧБ маркер 5x5";
