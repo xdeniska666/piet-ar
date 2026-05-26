@@ -16,7 +16,7 @@
     </script>
     
     <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_tiny.js?v=6" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
+    <script src="/aruco_tiny.js?v=7" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js по сети (404/CORS/Blocked)')"></script>
     
     <style>
         :root {
@@ -51,28 +51,38 @@
             justify-content: center;
         }
 
-        /* Видеоэлемент скрыт, рендерим через Canvas */
+        /* Видео отображается аппаратно на заднем плане */
         #video {
-            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+            display: block;
         }
 
-        /* Полноэкранный холст для камеры и AR эффектов */
+        /* Полноэкранный контейнер */
         #canvas-container {
             position: absolute;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             z-index: 1;
         }
 
+        /* Холст накладывается поверх видео для отрисовки графики */
         canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
+            z-index: 2;
+            pointer-events: none;
             display: block;
         }
 
@@ -363,10 +373,9 @@
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
                     }
-                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight} | Детекция: --ms`;
 
-                    // Отрисовываем кадр камеры на основной холст для пользователя
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    // Очищаем прозрачный холст перед рисованием графики поверх видео
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
                     
                     // Задаем уменьшенный размер для оптимизации детекции (ширина 240px) (только при изменении разрешения)
                     const detectWidth = 240;
@@ -376,19 +385,26 @@
                         detectCanvas.height = detectHeight;
                     }
 
-                    // Отрисовываем уменьшенный кадр на скрытый холст
+                    // Отрисовываем уменьшенный кадр на скрытый холст с замером времени
+                    const tDrawStart = performance.now();
                     detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
+                    const tDrawEnd = performance.now();
                     
-                    // Захватываем пиксели с уменьшенного холста
+                    // Захватываем пиксели с уменьшенного холста с замером времени
+                    const tGetStart = performance.now();
                     const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
+                    const tGetEnd = performance.now();
                     
                     // Производим детекцию с замером времени
-                    const t0 = performance.now();
+                    const tDetectStart = performance.now();
                     const markers = detector.detect(imageData);
-                    const t1 = performance.now();
-                    const detectTime = Math.round(t1 - t0);
+                    const tDetectEnd = performance.now();
                     
-                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight} | Детекция: ${detectTime}ms`;
+                    const drawTime = Math.round(tDrawEnd - tDrawStart);
+                    const getTime = Math.round(tGetEnd - tGetStart);
+                    const detectTime = Math.round(tDetectEnd - tDetectStart);
+                    
+                    resCounter.innerHTML = `Cam: ${video.videoWidth}x${video.videoHeight} | Draw: ${drawTime}ms | Get: ${getTime}ms | Detect: ${detectTime}ms`;
         
                     if (markers.length > 0) {
                         statusIndicator.className = 'status-dot detected';
