@@ -371,12 +371,17 @@
                     const vw = video.videoWidth;
                     const vh = video.videoHeight;
 
-                    // Устанавливаем размер холста для детектора (240px) только при изменении
+                    if (canvas.width !== vw || canvas.height !== vh) {
+                        canvas.width = vw;
+                        canvas.height = vh;
+                    }    
+
+                    // Скрытый холст для детекции остается маленьким (240px) для скорости
                     const detectWidth = 240;
                     const detectHeight = Math.round(240 * (vh / vw));
-                    if (canvas.width !== detectWidth || canvas.height !== detectHeight) {
-                        canvas.width = detectWidth;
-                        canvas.height = detectHeight;
+                    if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
+                        detectCanvas.width = detectWidth;
+                        detectCanvas.height = detectHeight;
                     }
 
                     // Очищаем прозрачный холст (только графика поверх видео-тега)
@@ -387,17 +392,13 @@
                     detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
                     const drawTime = Math.round(performance.now() - tDrawStart);
 
-                    // Захватываем пиксели
-                    const tGetStart = performance.now();
                     const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
-                    const getTime = Math.round(performance.now() - tGetStart);
 
-                    // Детекция
                     const tDetectStart = performance.now();
                     const markers = detector.detect(imageData);
                     const detectTime = Math.round(performance.now() - tDetectStart);
 
-                    resCounter.innerHTML = `Cam: ${vw}x${vh} | Draw: ${drawTime}ms | Get: ${getTime}ms | Det: ${detectTime}ms`;
+                    resCounter.innerHTML = `Cam: ${vw}x${vh} | Draw: ${drawTime}ms | Det: ${detectTime}ms`;
 
                     if (markers.length > 0) {
                         statusIndicator.className = 'status-dot detected';
@@ -408,6 +409,7 @@
                         // Пересчитываем координаты под экран
                         const scaleX = vw / detectWidth;
                         const scaleY = vh / detectHeight;
+
                         const scaledMarkers = markers.map(m => ({
                             id: m.id,
                             corners: m.corners.map(c => ({
@@ -426,8 +428,7 @@
                     console.error(e);
                 }
 
-                // Задержка 30мс для разгрузки процессора (~30 кадров в секунду для AI)
-                setTimeout(() => { isProcessing = false; }, 30);
+                isProcessing = false;
             }
             requestAnimationFrame(processFrame);
         }
