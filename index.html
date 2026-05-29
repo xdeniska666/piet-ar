@@ -377,8 +377,8 @@
                     }    
 
                     // Скрытый холст для детекции остается маленьким (240px) для скорости
-                    const detectWidth = 480;
-                    const detectHeight = Math.round(480 * (vh / vw));
+                    const detectWidth = 320;
+                    const detectHeight = Math.round(320 * (vh / vw)); // Получится 240px
                     if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
                         detectCanvas.width = detectWidth;
                         detectCanvas.height = detectHeight;
