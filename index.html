@@ -323,7 +323,7 @@
             }
 
             // Инициализируем детектор
-            detector = new AR.Detector();
+            detector = new AR.Detector({ dictionaryName: "ARUCO" });
 
             try {
                 const constraints = {
