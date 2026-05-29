@@ -237,7 +237,8 @@ AR.Detector = function(){
 
 AR.Detector.prototype.detect = function(imageSource){
   CV.toGrey(imageSource, this.grey);
-  CV.adaptiveThreshold(this.grey, this.thres, 21, 7);
+  // Используем классический threshold вместо капризного адаптивного
+  CV.threshold(this.grey, this.thres, 100);
   
   this.contours = CV.findContours(this.grey, this.thres);
   this.polygons = this.findCandidates(this.contours, imageSource.width * 0.05, 0.05, true);
