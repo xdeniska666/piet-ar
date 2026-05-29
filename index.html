@@ -376,8 +376,8 @@
                     }    
 
                     // Фиксируем оптимальное разрешение 320px для высокого FPS
-                    const detectWidth = 320;
-                    const detectHeight = Math.round(320 * (vh / vw));
+                    const detectWidth = 240;
+                    const detectHeight = Math.round(240 * (vh / vw));
                     if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
                         detectCanvas.width = detectWidth;
                         detectCanvas.height = detectHeight;
@@ -419,7 +419,7 @@
                         drawGlowingOutline(scaledMarkers);
                     } else {
                         statusIndicator.className = 'status-dot active';
-                        statusMessage.innerText = "Сканирование... Наведите на ЧБ маркер 6x6";
+                        statusMessage.innerText = "Сканирование... Наведите на ЧБ маркер 5x5";
                         statusMessage.style.color = 'var(--text)';
                         reticle.style.borderColor = 'rgba(0, 243, 255, 0.3)';
                     }    
