@@ -15,8 +15,7 @@
         }, true);
     </script>
     
-    <!-- JS-библиотека jsaruco (локальная версия) -->
-    <script src="/aruco_6x6.js" onerror="window.loadErrors.push('Не удалось загрузить /aruco_6x6.js')"></script>
+    <script src="/aruco_tiny.js" onerror="window.loadErrors.push('Не удалось загрузить /aruco_tiny.js')"></script>
     
     <style>
         :root {
@@ -235,14 +234,14 @@
             transition: all 0.3s ease;
         }
 
-        #reticle-overlay::before, #reticle-overlay::after {
+        /*#reticle-overlay::before, #reticle-overlay::after {
             content: '';
             position: absolute;
             width: 20px;
             height: 20px;
             border-color: var(--primary);
             border-style: solid;
-        }
+        }*/
 
         /* Анимации */
         @keyframes pulse {
@@ -262,7 +261,7 @@
     <div id="header-panel">
         <div class="brand-info">
             <span class="brand-title">Piet-AR Core</span>
-            <span class="brand-subtitle">Status: ARUCO_ORIGINAL_6X6</span>
+            <span class="brand-subtitle">Status: ARUCO_DICT_5X5_50</span>
         </div>
     </div>
 
@@ -316,7 +315,7 @@
             if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
                 let errorDetails = (window.loadErrors && window.loadErrors.length > 0) 
                     ? "<br><small style='font-size:0.75rem;color:#ffa0a0;font-family:monospace;display:block;margin-top:5px;line-height:1.2;'>" + window.loadErrors.join("<br>") + "</small>" 
-                    : "<br><small style='font-size:0.75rem;color:#ffa0a0;display:block;margin-top:5px;'>Причина: Файл не загрузился (кэш браузера) или сбой инициализации</small>";
+                    : "<br><small style='font-size:0.75rem;color:#ffa0a0;display:block;margin-top:5px;'>Причина: Файл не загрузился или сбой инициализации</small>";
                 statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!" + errorDetails;
                 statusMessage.style.color = "#ff3838";
                 return;
@@ -376,9 +375,9 @@
                         canvas.height = vh;
                     }    
 
-                    // Скрытый холст для детекции остается маленьким (240px) для скорости
+                    // Фиксируем оптимальное разрешение 320px для высокого FPS
                     const detectWidth = 320;
-                    const detectHeight = Math.round(320 * (vh / vw)); // Получится 240px
+                    const detectHeight = Math.round(320 * (vh / vw));
                     if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
                         detectCanvas.width = detectWidth;
                         detectCanvas.height = detectHeight;
