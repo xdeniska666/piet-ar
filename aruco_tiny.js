@@ -334,7 +334,7 @@ AR.Detector = function(){
 AR.Detector.prototype.detect = function(image){
   // 1. Просто копируем уже бинаризованные нами в index.html пиксели
   CV.grayscale(image, this.grey);
-  CV.adaptiveThreshold(this.grey, this.thres, 10, 2);
+  CV.threshold(this.grey, this.thres, 128);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
