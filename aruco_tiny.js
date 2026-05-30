@@ -332,7 +332,6 @@ AR.Detector = function(){
 };
 
 AR.Detector.prototype.detect = function(image){
-  // 1. Просто копируем уже бинаризованные нами в index.html пиксели
   CV.grayscale(image, this.grey);
   CV.threshold(this.grey, this.thres, 128);
 
@@ -342,7 +341,27 @@ AR.Detector.prototype.detect = function(image){
   this.candidates = this.clockwiseCorners(this.candidates);
   this.candidates = this.notTooNear(this.candidates, 10);
 
-  return this.findMarkers(this.grey, this.candidates, 49);
+  // ВРЕМЕННЫЙ ХАК ДЛЯ ОТЛАДКИ:
+  // Если контур похож на маркер, мы принудительно заставим его отобразиться
+  var markers = this.findMarkers(this.grey, this.candidates, 49);
+
+  // Если стандартный поиск вернул пустоту, но кандидаты есть — смотрим биты
+  if (markers.length === 0 && this.candidates.length > 0) {
+    for (var i = 0; i < this.candidates.length; ++i) {
+      CV.warp(this.grey, this.homography, this.candidates[i], 49);
+      CV.threshold(this.homography, this.homography, CV.otsu(this.homography));
+
+      // Считываем то, что распознал getMarker
+      var m = this.getMarker(this.homography, this.candidates[i]);
+      if (!m) {
+        // Если getMarker вернул null из-за словаря, создаем фейковый маркер с ID: 999
+        // чтобы увидеть зеленый квадрат на экране телефона!
+        return [new AR.Marker(999, this.candidates[i])];
+      }
+    }
+  }      
+
+  return markers;
 };
 
 AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){
