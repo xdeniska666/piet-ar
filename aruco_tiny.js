@@ -464,9 +464,10 @@ AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
 
 AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   var width = (imageSrc.width / 7) >>> 0,
-      minZero = (width * width) >> 1,
+      minZero = Math.floor((width * width) * 0.4),
       bits = [], rotations = [], distances = [],
-      square, pair, inc, i, j;
+      pair = {first: Infinity, second: 0},
+      i, j, inc, square, count, x, y;
 
   for (i = 0; i < 7; ++ i){
     inc = (0 === i || 6 === i)? 1: 6;
@@ -483,17 +484,25 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
     bits[i] = [];
 
     for (j = 0; j < 5; ++ j){
-      square = {x: (j + 1) * width, y: (i + 1) * width, width: width, height: width};
+      square = {
+        x: (j + 1) * width + 1,
+        y: (i + 1) * width + 1,
+        width: width - 2,
+        height: width - 2
+      };  
       
-      bits[i][j] = CV.countNonZero(imageSrc, square) > minZero? 1: 0;
+      var cellArea = square.width * square.height;
+      bits[i][j] = CV.countNonZero(imageSrc, square) > (cellArea >> 1)? 1: 0;
     }
   }
 
   rotations[0] = bits;
   distances[0] = this.hammingDistance( rotations[0] );
   
-  pair = {first: distances[0], second: 0};
+  pair.first = distances[0];
+  pair.second = 0;
   
+  // Проверяем развороты
   for (i = 1; i < 4; ++ i){
     rotations[i] = this.rotate( rotations[i - 1] );
     distances[i] = this.hammingDistance( rotations[i] );
@@ -504,6 +513,7 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
     }
   }
 
+  // Для кастомного словаря Хэмминг должен дать 0 ошибок
   if (0 !== pair.first){
     return null;
   }
