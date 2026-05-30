@@ -464,37 +464,21 @@ AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
 
 AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   var width = (imageSrc.width / 7) >>> 0,
-      minZero = Math.floor((width * width) * 0.4),
       bits = [], rotations = [], distances = [],
       pair = {first: Infinity, second: 0},
-      i, j, inc, square, count, x, y;
-
-  for (i = 0; i < 7; ++ i){
-    inc = (0 === i || 6 === i)? 1: 6;
-    
-    for (j = 0; j < 7; j += inc){
-      square = {x: j * width, y: i * width, width: width, height: width};
-      if ( CV.countNonZero(imageSrc, square) > minZero){
-        return null;
-      }
-    }
-  }
+      i, j, square, x, y;
 
   for (i = 0; i < 5; ++ i){
     bits[i] = [];
-
+    
     for (j = 0; j < 5; ++ j){
-      square = {
-        x: (j + 1) * width + 1,
-        y: (i + 1) * width + 1,
-        width: width - 2,
-        height: width - 2
-      };  
+      // Рассчитываем индекс центрального пикселя для текущей внутренней ячейки
+      x = (((j + 1) * width) + (width >> 1)) >>> 0;
+      y = (((i + 1) * width) + (width >> 1)) >>> 0;
       
-      var cellArea = square.width * square.height;
-      bits[i][j] = CV.countNonZero(imageSrc, square) > (cellArea >> 1)? 1: 0;
+      bits[i][j] = imageSrc.data[y * imageSrc.width + x] > 128? 1: 0;
     }
-  }
+  }    
 
   rotations[0] = bits;
   distances[0] = this.hammingDistance( rotations[0] );
@@ -502,7 +486,7 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   pair.first = distances[0];
   pair.second = 0;
   
-  // Проверяем развороты
+  // Проверяем все 4 возможных разворота маркера в пространстве
   for (i = 1; i < 4; ++ i){
     rotations[i] = this.rotate( rotations[i - 1] );
     distances[i] = this.hammingDistance( rotations[i] );
