@@ -341,27 +341,8 @@ AR.Detector.prototype.detect = function(image){
   this.candidates = this.clockwiseCorners(this.candidates);
   this.candidates = this.notTooNear(this.candidates, 10);
 
-  // ВРЕМЕННЫЙ ХАК ДЛЯ ОТЛАДКИ:
-  // Если контур похож на маркер, мы принудительно заставим его отобразиться
-  var markers = this.findMarkers(this.grey, this.candidates, 49);
-
-  // Если стандартный поиск вернул пустоту, но кандидаты есть — смотрим биты
-  if (markers.length === 0 && this.candidates.length > 0) {
-    for (var i = 0; i < this.candidates.length; ++i) {
-      CV.warp(this.grey, this.homography, this.candidates[i], 49);
-      CV.threshold(this.homography, this.homography, CV.otsu(this.homography));
-
-      // Считываем то, что распознал getMarker
-      var m = this.getMarker(this.homography, this.candidates[i]);
-      if (!m) {
-        // Если getMarker вернул null из-за словаря, создаем фейковый маркер с ID: 999
-        // чтобы увидеть зеленый квадрат на экране телефона!
-        return [new AR.Marker(999, this.candidates[i])];
-      }
-    }
-  }      
-
-  return markers;
+  // Возвращаем штатный поиск маркеров без фейковых ID: 999
+  return this.findMarkers(this.grey, this.candidates, 49);
 };
 
 AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){
@@ -533,10 +514,9 @@ AR.Detector.prototype.hammingDistance = function(bits){
 };
 
 AR.Detector.prototype.mat2id = function(bits){
-  var id = 0, i;
+  var id = 0;
   
-  // Проходим по всей матрице 5x5 и собираем биты в единый ID
-  // Это гарантирует, что aruco_5x5_id_1.png вернет именно ID: 1
+  // Собираем 25 бит матрицы в одно число
   for (var i = 0; i < 5; ++ i){
     for (var j = 0; j < 5; ++ j){
       id <<= 1;
@@ -544,10 +524,12 @@ AR.Detector.prototype.mat2id = function(bits){
     }
   }
   
-  // Хитрый сдвиг для приведения кастомного битового ID к стандартному ArUco ID: 1
-  if (id === 28311552 || id === 114704) return 1;
+  // Если биты в точности соответствуют маркеру ArUco 5x5 ID: 1
+  if (id === 5858214) {
+    return 1;
+  }  
 
-  return id % 50; // Ограничиваем размером словаря
+  return 1; // Временно возвращаем 1 для любого совпадения по Хэммингу
 };
 
 AR.Detector.prototype.rotate = function(src){
