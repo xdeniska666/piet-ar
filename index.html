@@ -397,6 +397,13 @@
                     const markers = detector.detect(imageData);
                     const detectTime = Math.round(performance.now() - tDetectStart);
 
+                    console.log("🔍 Геометрия: кандидатов в кадре =", detector.candidates ? detector.candidates.length : 0);
+                    if (markers.length > 0) {
+                        console.log("✅ УРА! Маркер успешно распознан! ID:", markers[0].id);
+                    } else {
+                        console.log("❌ Контур найден, но битовая матрица не совпала");
+                    }        
+
                     resCounter.innerHTML = `Cam: ${vw}x${vh} | Draw: ${drawTime}ms | Det: ${detectTime}ms`;
 
                     if (markers.length > 0) {

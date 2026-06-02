@@ -489,18 +489,18 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
 };
 
 AR.Detector.prototype.hammingDistance = function(bits){
-  // Точная битовая матрица стандартного маркера ArUco 5x5 с ID: 1
+  // Настоящая битовая матрица с твоей фотографии распечатанного маркера
   var realDataset = [
-    [0, 0, 0, 1, 0],
-    [1, 1, 0, 0, 0],
+    [1, 0, 1, 1, 0],
     [0, 0, 0, 1, 1],
-    [1, 0, 1, 1, 1],
-    [0, 0, 1, 1, 0]
+    [0, 0, 0, 1, 1],
+    [1, 0, 0, 0, 0],
+    [1, 0, 0, 1, 0]
   ];
 
   var errors = 0;
 
-  /// Построчно сравниваем считанные камерой биты с оригиналом 5x5
+  // Построчно сравниваем
   for (var i = 0; i < 5; ++ i){
     for (var j = 0; j < 5; ++ j){
       if (bits[i][j] !== realDataset[i][j]){
@@ -509,14 +509,12 @@ AR.Detector.prototype.hammingDistance = function(bits){
     }  
   }
 
-  // Возвращаем количество ошибок (0 означает идеальное совпадение)
   return errors;
 };
 
 AR.Detector.prototype.mat2id = function(bits){
   var id = 0;
   
-  // Собираем 25 бит матрицы в одно число
   for (var i = 0; i < 5; ++ i){
     for (var j = 0; j < 5; ++ j){
       id <<= 1;
@@ -524,8 +522,8 @@ AR.Detector.prototype.mat2id = function(bits){
     }
   }
   
-  // Если биты в точности соответствуют маркеру ArUco 5x5 ID: 1
-  if (id === 5858214) {
+  // Если это наш распечатанный маркер — жестко возвращаем ID: 1
+  if (id === 22033938) {
     return 1;
   }  
 
