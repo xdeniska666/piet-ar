@@ -253,6 +253,29 @@
             0% { opacity: 0.6; box-shadow: 0 0 4px var(--success); }
             100% { opacity: 1; box-shadow: 0 0 14px var(--success); }
         }
+
+        #debug-log-panel {
+            position: absolute;
+            bottom: 80px;
+            left: 10px;
+            right: 10px;
+            height: 120px;
+            background: rgba(13, 16, 27, 0.85);
+            border: 1px solid var(--primary-glow);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 11px;
+            color: #ffffff;
+            overflow-y: auto;
+            z-index: 999;
+            pointer-events: none;
+        }
+        .log-entry { margin-bottom: 4px; line-height: 1.3; }
+        .log-success { color: var(--success); font-weight: bold; }
+        .log-warn { color: #ffb703; }
+        .log-error { color: #ff4d4d; }
+
     </style>
 </head>
 <body>
@@ -288,6 +311,10 @@
             <span id="res-counter">Разрешение: --</span>
         </div>
     </div>
+
+    <div id="debug-log-panel"> 
+        <div class="log-entry log-warn">🟡 Окно отладки инициализировано. Жду кадры...</div>
+    </div>       
 
     <script>
         const video = document.getElementById('video');
@@ -351,91 +378,79 @@
             }
         }
 
-        async function processFrame() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
-                isProcessing = true;
-                frameCount++;
+        function logToScreen(text, type = '') {
+            const panel = document.getElementById('debug-log-panel');
+            if (!panel) return;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+            panel.appendChild(entry);
 
-                // Расчет FPS
-                const now = performance.now();
-                const delta = now - lastFrameTime;
-                if (delta >= 1000) {
-                    fps = Math.round((frameCount * 1000) / delta);
-                    fpsCounter.innerText = `FPS: ${fps}`;
-                    frameCount = 0;
-                    lastFrameTime = now;
-                }
+            // Автоскролл вниз
+            panel.scrollTop = panel.scrollHeight;
 
-                try {
-                    const vw = video.videoWidth;
-                    const vh = video.videoHeight;
-
-                    if (canvas.width !== vw || canvas.height !== vh) {
-                        canvas.width = vw;
-                        canvas.height = vh;
-                    }    
-
-                    // Фиксируем оптимальное разрешение 320px для высокого FPS
-                    const detectWidth = 240;
-                    const detectHeight = Math.round(240 * (vh / vw));
-                    if (detectCanvas.width !== detectWidth || detectCanvas.height !== detectHeight) {
-                        detectCanvas.width = detectWidth;
-                        detectCanvas.height = detectHeight;
-                    }
-
-                    // Очищаем прозрачный холст (только графика поверх видео-тега)
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    // Рисуем уменьшенный кадр на скрытый холст
-                    const tDrawStart = performance.now();
-                    detectCtx.drawImage(video, 0, 0, detectWidth, detectHeight);
-                    const drawTime = Math.round(performance.now() - tDrawStart);
-
-                    const imageData = detectCtx.getImageData(0, 0, detectWidth, detectHeight);
-
-                    const tDetectStart = performance.now();
-                    const markers = detector.detect(imageData);
-                    const detectTime = Math.round(performance.now() - tDetectStart);
-
-                    console.log("🔍 Геометрия: кандидатов в кадре =", detector.candidates ? detector.candidates.length : 0);
-                    if (markers.length > 0) {
-                        console.log("✅ УРА! Маркер успешно распознан! ID:", markers[0].id);
-                    } else {
-                        console.log("❌ Контур найден, но битовая матрица не совпала");
-                    }        
-
-                    resCounter.innerHTML = `Cam: ${vw}x${vh} | Draw: ${drawTime}ms | Det: ${detectTime}ms`;
-
-                    if (markers.length > 0) {
-                        statusIndicator.className = 'status-dot detected';
-                        statusMessage.innerText = `✅ Найден маркер ID: ${markers[0].id}`;
-                        statusMessage.style.color = 'var(--success)';
-                        reticle.style.borderColor = 'var(--success)';
-
-                        // Пересчитываем координаты под экран
-                        const scaleX = vw / detectWidth;
-                        const scaleY = vh / detectHeight;
-
-                        const scaledMarkers = markers.map(m => ({
-                            id: m.id,
-                            corners: m.corners.map(c => ({
-                                x: c.x * scaleX,
-                                y: c.y * scaleY
-                            }))
-                        }));
-                        drawGlowingOutline(scaledMarkers);
-                    } else {
-                        statusIndicator.className = 'status-dot active';
-                        statusMessage.innerText = "Сканирование... Наведите на ЧБ маркер 5x5";
-                        statusMessage.style.color = 'var(--text)';
-                        reticle.style.borderColor = 'rgba(0, 243, 255, 0.3)';
-                    }    
-                } catch (e) {
-                    console.error(e);
-                }
-
-                isProcessing = false;
+            // Ограничиваем количество строк, чтобы не перегружать телефон
+            while (panel.childNodes.length > 20) {
+                panel.removeChild(panel.firstChild);
             }
+        }        
+
+        async function processFrame() {
+            if (!isTrackerReady) {
+                requestAnimationFrame(processFrame);
+                return;
+            }    
+
+            try {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Замеряем скорость работы алгоритма
+                const t0 = performance.now();
+                const markers = detector.detect(imageData);
+                const dt = Math.round(performance.now() - t0);
+
+                // Получаем количество найденных четырехугольников
+                const candidatesCount = detector.candidates ? detector.candidates.length : 0;    
+
+                if (candidatesCount > 0) {
+                    logToScreen(`Контуров-кандидатов в кадре: ${candidatesCount}`, 'log-warn');
+                } else {
+                    logToScreen(`Поиск контуров... (0 кандидатов)`, '');
+                }
+                
+                // Очищаем слой графики интерфейса
+                uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+
+                if (markers.length > 0) {
+                    logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
+            
+                    // Рисуем рамку вокруг маркера
+                    const corners = markers[0].corners;
+                    uiCtx.strokeStyle = "var(--success)";
+                    uiCtx.lineWidth = 4;
+                    uiCtx.beginPath();
+                    uiCtx.moveTo(corners[0].x, corners[0].y);
+                    for (let i = 1; i < 4; i++) {
+                        uiCtx.lineTo(corners[i].x, corners[i].y);
+                    }
+                    uiCtx.closePath();
+                    uiCtx.stroke();
+
+                    // Текст над маркером
+                    uiCtx.fillStyle = "var(--success)";
+                    uiCtx.font = "bold 14px 'Outfit', sans-serif";
+                    uiCtx.fillText(`AR ID: ${markers[0].id}`, corners[0].x, corners[0].y - 10);
+                }    
+                
+                // Обновляем виджеты производительности в верхнем меню
+                fpsWidget.innerText = Math.round(1000 / dt) || 30;
+                detWidget.innerText = dt;
+                
+            } catch (err) {
+                logToScreen(`Ошибка цикла: ${err.message}`, 'log-error');
+            }
+
             requestAnimationFrame(processFrame);
         }
         
