@@ -327,21 +327,22 @@
         const reticle = document.getElementById('reticle-overlay');
         const startBtn = document.getElementById('start-btn');
 
+        // Фиксируем переменные, чтобы браузер не падал
+        let isTrackerReady = true;
         let isProcessing = false;
         let lastFrameTime = performance.now();
         let frameCount = 0;
-        let fps = 0;
         let detector;
         
-        // Скрытый холст для оптимизации детекции (снижает нагрузку на CPU/GPU)
-        const detectCanvas = document.createElement('canvas');
-        const detectCtx = detectCanvas.getContext('2d');
+        // Виджеты для обновления плашки интерфейса
+        const fpsWidget = document.getElementById('fps-counter');
+        const detWidget = document.getElementById('status-message');
 
         async function startCamera() {
             // Проверка загрузки библиотеки jsaruco
             if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
                 let errorDetails = (window.loadErrors && window.loadErrors.length > 0) 
-                    ? "<br><small style='font-size:0.75rem;color:#ffa0a0;font-family:monospace;display:block;margin-top:5px;line-height:1.2;'>" + window.loadErrors.join("<br>") + "</small>" 
+                    ? "<br><small style='font-size:0.75rem;color:#ffa0a0;font-family:monospace;display:block;margin-top:5px;line-height:1.2;'>" + window.loadErrors.join("<br>") + "</small>"
                     : "<br><small style='font-size:0.75rem;color:#ffa0a0;display:block;margin-top:5px;'>Причина: Файл не загрузился или сбой инициализации</small>";
                 statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!" + errorDetails;
                 statusMessage.style.color = "#ff3838";
@@ -371,6 +372,13 @@
                 statusMessage.innerText = "Инициализация видеопотока...";
                 
                 // Запускаем цикл рендеринга
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
+                    logToScreen(`Поток запущен: ${video.videoWidth}x${video.videoHeight}`, 'log-success');
+                };
+
                 requestAnimationFrame(processFrame);
             } catch (err) {
                 statusMessage.innerHTML = "❌ Ошибка камеры: " + err.message;
@@ -403,7 +411,7 @@
             // Если трекер еще не готов, пишем об этом один раз в лог и ждем
             if (!isTrackerReady) {
                 if (lastTrackerState !== false) {
-                    logToScreen("⏳ Ожидание готовности трекера (isTrackerReady)...", "log-warn");
+                    logToScreen("⏳ Ожидание готовности трекера...", "log-warn");
                     lastTrackerState = false;
                 }    
                 requestAnimationFrame(processFrame);
@@ -418,13 +426,22 @@
             try {
                 // Проверяем, захватывается ли видео
                 if (!video.videoWidth || !video.videoHeight) {
-                    logToScreen("⚠ Видеопоток пустой (0x0px)", "log-error");
                     requestAnimationFrame(processFrame);
                     return;
                 }
 
+                // Рисуем кадр на холст
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                // Считаем FPS
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFrameTime >= 1000) {
+                    fpsWidget.innerText = `FPS: ${frameCount}`;
+                    frameCount = 0;
+                    lastFrameTime = now;
+                }    
                 
                 // Замеряем скорость работы алгоритма
                 const t0 = performance.now();
@@ -446,27 +463,27 @@
                 if (markers.length > 0) {
                     logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
             
-                    // Рисуем рамку вокруг маркера
+                    // Рисуем рамку маркера прямо на основном ctx, так как uiCtx у нас нет
                     const corners = markers[0].corners;
-                    uiCtx.strokeStyle = "var(--success)";
-                    uiCtx.lineWidth = 4;
-                    uiCtx.beginPath();
-                    uiCtx.moveTo(corners[0].x, corners[0].y);
+                    ctx.strokeStyle = "#00ff87";
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(corners[0].x, corners[0].y);
                     for (let i = 1; i < 4; i++) {
-                        uiCtx.lineTo(corners[i].x, corners[i].y);
+                        ctx.lineTo(corners[i].x, corners[i].y);
                     }
-                    uiCtx.closePath();
-                    uiCtx.stroke();
+                    ctx.closePath();
+                    ctx.stroke();
 
                     // Текст над маркером
-                    uiCtx.fillStyle = "var(--success)";
-                    uiCtx.font = "bold 14px 'Outfit', sans-serif";
-                    uiCtx.fillText(`AR ID: ${markers[0].id}`, corners[0].x, corners[0].y - 10);
-                }    
-                
-                // Обновляем виджеты производительности в верхнем меню
-                fpsWidget.innerText = Math.round(1000 / dt) || 30;
-                detWidget.innerText = dt;
+                    ctx.fillStyle = "#00ff87";
+                    ctx.font = "bold 16px 'Outfit', sans-serif";
+                    ctx.fillText(`AR ID: ${markers[0].id}`, corners[0].x, corners[0].y - 10);
+
+                    detWidget.innerText = `Найден маркер ID: ${markers[0].id} (${dt}ms)`;
+                } else {
+                    detWidget.innerText = `Детекция: ${dt}ms`;    
+                }
                 
             } catch (err) {
                 logToScreen(`Ошибка внутри цикла: ${err.message}`, 'log-error');
