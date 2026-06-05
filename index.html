@@ -378,6 +378,7 @@
             }
         }
 
+        // 1. Помощник для вывода текста на экран телефона
         function logToScreen(text, type = '') {
             const panel = document.getElementById('debug-log-panel');
             if (!panel) return;
@@ -395,13 +396,33 @@
             }
         }        
 
+        // 2. Главный цикл обработки кадров
+        let lastTrackerState = null; // Для отслеживания смены статуса
+
         async function processFrame() {
+            // Если трекер еще не готов, пишем об этом один раз в лог и ждем
             if (!isTrackerReady) {
+                if (lastTrackerState !== false) {
+                    logToScreen("⏳ Ожидание готовности трекера (isTrackerReady)...", "log-warn");
+                    lastTrackerState = false;
+                }    
                 requestAnimationFrame(processFrame);
                 return;
+            }
+
+            if (lastTrackerState === false) {
+                logToScreen("🚀 Трекер успешно готов! Начинаю обработку...", "log-success");
+                lastTrackerState = true;
             }    
 
             try {
+                // Проверяем, захватывается ли видео
+                if (!video.videoWidth || !video.videoHeight) {
+                    logToScreen("⚠ Видеопоток пустой (0x0px)", "log-error");
+                    requestAnimationFrame(processFrame);
+                    return;
+                }
+
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
@@ -448,7 +469,8 @@
                 detWidget.innerText = dt;
                 
             } catch (err) {
-                logToScreen(`Ошибка цикла: ${err.message}`, 'log-error');
+                logToScreen(`Ошибка внутри цикла: ${err.message}`, 'log-error');
+                console.error(err);
             }
 
             requestAnimationFrame(processFrame);
