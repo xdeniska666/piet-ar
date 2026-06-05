@@ -408,7 +408,6 @@
         let lastTrackerState = null; // Для отслеживания смены статуса
 
         async function processFrame() {
-            // Если трекер еще не готов, пишем об этом один раз в лог и ждем
             if (!isTrackerReady) {
                 if (lastTrackerState !== false) {
                     logToScreen("⏳ Ожидание готовности трекера...", "log-warn");
@@ -448,19 +447,32 @@
                 const markers = detector.detect(imageData);
                 const dt = Math.round(performance.now() - t0);
 
-                // Получаем количество найденных четырехугольников
-                const candidatesCount = detector.candidates ? detector.candidates.length : 0;    
+                // Выводим в лог количество полигонов, которые алгоритм вообще смог найти на листе
+                const totalPolys = detector.polys ? detector.polys.length : 0;
+                const candidatesCount = detector.candidates ? detector.candidates.length : 0;
 
-                if (candidatesCount > 0) {
-                    logToScreen(`Контуров-кандидатов в кадре: ${candidatesCount}`, 'log-warn');
-                } else {
-                    logToScreen(`Поиск контуров... (0 кандидатов)`, '');
+                logToScreen(`Найдено замкнутых фигур: ${totalPolys} | Кандидатов: ${candidatesCount}`, '');
+
+                // ОТЛАДОЧНОЕ РИСОВАНИЕ: Подсвечиваем абсолютно все полигоны, что увидела камера
+                if (detector.polys && detector.polys.length > 0) {
+                    ctx.strokeStyle = "rgba(255, 183, 3, 0.5)"; // Полупрозрачный желтый
+                    ctx.lineWidth = 2;
+                    detector.polys.forEach(poly => {
+                        if (poly.length > 0) {
+                            ctx.beginPath();
+                            ctx.moveTo(poly[0].x, poly[0].y);
+                            for (let i = 1; i < poly.length; i++) {
+                                ctx.lineTo(poly[i].x, poly[i].y);
+                            }
+                            ctx.closePath();
+                            ctx.stroke();
+                        }
+                    });            
                 }
 
                 if (markers.length > 0) {
                     logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
             
-                    // Рисуем рамку маркера прямо на основном ctx, так как uiCtx у нас нет
                     const corners = markers[0].corners;
                     ctx.strokeStyle = "#00ff87";
                     ctx.lineWidth = 4;
@@ -472,7 +484,6 @@
                     ctx.closePath();
                     ctx.stroke();
 
-                    // Текст над маркером
                     ctx.fillStyle = "#00ff87";
                     ctx.font = "bold 16px 'Outfit', sans-serif";
                     ctx.fillText(`AR ID: ${markers[0].id}`, corners[0].x, corners[0].y - 10);
