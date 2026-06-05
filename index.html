@@ -456,9 +456,6 @@
                 } else {
                     logToScreen(`Поиск контуров... (0 кандидатов)`, '');
                 }
-                
-                // Очищаем слой графики интерфейса
-                uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
 
                 if (markers.length > 0) {
                     logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
