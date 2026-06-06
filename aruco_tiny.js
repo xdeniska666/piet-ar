@@ -334,9 +334,8 @@ AR.Detector = function(){
 AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
-  // Автоматически вычисляем идеальный порог под текущее освещение камеры
-  var dynamicThreshold = CV.otsu(this.grey);
-  CV.threshold(this.grey, this.thres, dynamicThreshold);
+  // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
+  CV.threshold(this.grey, this.thres, 90);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
