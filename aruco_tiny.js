@@ -339,12 +339,13 @@ AR.Detector.prototype.detect = function(image){
 
   this.contours = CV.findContours(this.thres, this.binary);
 
-  this.candidates = this.findCandidates(this.contours, image.width * 0.05, 0.05, 10);
-  this.candidates = this.clockwiseCorners(this.candidates);
-  this.candidates = this.notTooNear(this.candidates, 10);
+  // Сохраняем промежуточные этапы для детального аудита
+  this.stage_total_contours = this.contours.length; // Сколько вообще стыков/линий нашла камера
 
-  // Возвращаем штатный поиск маркеров без фейковых ID: 999
-  return this.findMarkers(this.grey, this.candidates, 49);
+  this.polys = this.findCandidates(this.contours, image.width * 0.2, 0.05, false);
+  this.stage_candidates = this.polys.length; // Сколько из них подошли под базовый четырехугольник
+  
+  return this.findMarkers(this.polys, this.thres);
 };
 
 AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){
