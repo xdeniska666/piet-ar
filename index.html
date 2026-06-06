@@ -429,11 +429,15 @@
                     return;
                 }
 
-                // Корректируем размеры холста под реальный поток, если они сбросились
-                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
+                // КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ: Жестко фиксируем рабочую матрицу пикселей.
+                // Вместо огромного разрешения телефона обрабатываем легкий и чистый кадр.
+                const targetWidth = 400;
+                const targetHeight = 300;
+
+                if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                    canvas.width = targetWidth;
+                    canvas.width = targetWidth;
+                    resCounter.innerText = `Матрица: ${targetWidth}x${targetHeight}`;
                 }    
 
                 // Рисуем кадр
@@ -459,7 +463,7 @@
 
                 logToScreen(`Фигур: ${totalPolys} | Кандидатов: ${candidatesCount}`, '');
 
-                // Рисуем желтые контуры для всех найденных фигур
+                // Рисуем контуры
                 if (detector.polys && detector.polys.length > 0) {
                     ctx.strokeStyle = "rgba(255, 183, 3, 0.6)";
                     ctx.lineWidth = 2;
