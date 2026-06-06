@@ -429,15 +429,28 @@
                     return;
                 }
 
-                // Работаем на стабильном пропорциональном разрешении (0.5x от камеры)
+                // АВТОМАТИЧЕСКАЯ КОРРЕКЦИЯ ОРИЕНТАЦИИ:
+                // Проверяем, как именно мобильный браузер отдает стороны, 
+                // и гарантируем строгое сохранение пропорций 1:1.
                 const scaleFactor = 0.5;
-                const targetWidth = Math.round(video.videoWidth * scaleFactor);
-                const targetHeight = Math.round(video.videoHeight * scaleFactor);
+                let targetWidth, targetHeight;
 
+                if (video.videoWidth > video.videoHeight) {
+                    // Если поток горизонтальный (или перевернутый браузером)
+                    targetWidth = Math.round(video.videoWidth * scaleFactor);
+                    targetHeight = Math.round(video.videoHeight * scaleFactor);
+                } else {
+                    // Если поток честный вертикальный (как твой 480х640)
+                    targetWidth = Math.round(video.videoWidth * scaleFactor);
+                    targetHeight = Math.round(video.videoHeight * scaleFactor);
+                }       
+
+                // Принудительно выставляем размеры холста
                 if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
                     canvas.width = targetWidth;
                     canvas.width = targetWidth;
                     resCounter.innerText = `Матрица: ${targetWidth}x${targetHeight}`;
+                    logToScreen(`Геометрия выровнена: ${targetWidth}x${targetHeight}`, 'log-success');
                 }    
 
                 // Рисуем кадр
@@ -458,7 +471,7 @@
                 const markers = detector.detect(imageData);
                 const dt = Math.round(performance.now() - t0);
 
-                // --- ПОЛНЫЙ ИНЖЕНЕРНЫЙ АУДИТ КОНВЕЙЕРА ---
+                // Вытаскиваем аудит конвейера
                 const rawContours = detector.stage_total_contours || 0; // Шаг 1: Поиск линий
                 const candidates = detector.stage_candidates || 0;     // Шаг 2: Четырехугольники
                 const finalMarkers = markers.length;                    // Шаг 3: Валидация битов
@@ -475,7 +488,7 @@
 
                 // Подсвечиваем всё, что вообще смогла зацепить камера на Шаге 2
                 if (detector.polys && detector.polys.length > 0) {
-                    ctx.strokeStyle = "rgba(255, 183, 3, 0.7)";
+                    ctx.strokeStyle = "rgba(255, 183, 3, 0.8)";
                     ctx.lineWidth = 2;
                     detector.polys.forEach(poly => {
                         if (poly.length > 0) {
@@ -507,7 +520,7 @@
                 }
                 
             } catch (err) {
-                logToScreen(`Ошибка аудита: ${err.message}`, 'log-error');
+                logToScreen(`Ошибка выравнивания: ${err.message}`, 'log-error');
                 console.error(err);
             }
 
