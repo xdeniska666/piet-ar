@@ -342,7 +342,7 @@ AR.Detector.prototype.detect = function(image){
   // Сохраняем промежуточные этапы для детального аудита
   this.stage_total_contours = this.contours.length; // Сколько вообще стыков/линий нашла камера
 
-  var candidates = this.findCandidates(this.contours, image.width * 0.1, 0.05, 10);
+  var candidates = CV.findCandidates(this.contours, image.width * 0.1, 0.05, 10);
   candidates = this.clockwiseCorners(candidates);
   candidates = this.notTooNear(candidates, 10);
   
