@@ -335,41 +335,125 @@ AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
   // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.threshold(this.grey, this.thres, 90);
+  CV.threshold(this.grey, this.thres, 100);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
   // Сохраняем промежуточные этапы для детального аудита
   this.stage_total_contours = this.contours.length; // Сколько вообще стыков/линий нашла камера
 
-  this.polys = this.findCandidates(this.contours, image.width * 0.2, 0.05, false);
-  this.stage_candidates = this.polys.length; // Сколько из них подошли под базовый четырехугольник
-  return this.findMarkers(this.thres, this.polys, 49);
+  var candidates = this.findCandidates(this.contours, image.width * 0.1, 0.05, 10);
+  candidates = this.clockwiseCorners(candidates);
+  candidates = this.notTooNear(candidates, 10);
+  
+  this.stage_candidates = candidates.length;
+
+  this.candidates = candidates;
+  // Передаем размер 140 (140 / 7 ячеек = ровно 20 пикселей на одну ячейку маркера)
+  return this.findMarkers(this.thres, candidates, 140);
 };
 
-AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){
-  var candidates = [], len = contours.length, contour, poly, i;
+// 2. Билинейная интерполяция с защитой от мусора в памяти и деления на ноль
+CV.warp = function(imageSrc, imageDst, contour, warpSize){
+  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2, z, x, y, i, j;
 
-  this.polys = [];
-  
-  for (i = 0; i < len; ++ i){
-    contour = contours[i];
+  var m = CV.getPerspectiveTransform(contour, warpSize);
 
-    if (contour.length >= minSize){
-      poly = CV.approxPolyDP(contour, contour.length * epsilon);
+  // Выделяем чистый массив под конкретный размер текущего кадра
+  imageDst.data = new Uint8Array(warpSize * warpSize);
+  var dst = imageDst.data;
 
-      this.polys.push(poly);
+  for (i = 0; i < warpSize; ++ i){
+    for (j = 0; j < warpSize; ++ j){
+      z = m[6] * j + m[7] * i + m[8];
+      if (z === 0) continue; // Защита от схлопывания перспективы
 
-      if ( (4 === poly.length) && ( CV.isContourConvex(poly) ) ){
+      x = (m[0] * j + m[1] * i + m[2]) / z;
+      y = (m[3] * j + m[4] * i + m[5]) / z;
 
-        if ( CV.minEdgeLength(poly) >= minLength){
-          candidates.push(poly);
-        }
+      sx1 = x >>> 0; sy1 = y >>> 0;
+      sx2 = sx1 === width - 1? sx1: sx1 + 1;
+      sy2 = sy1 === height - 1? sy1: sy1 + 1;
+
+      if (sx1 >= width || sy1 >= height) {
+        dst[pos ++] = 0;
+        continue;
       }
+      
+      dx1 = x - sx1; dy1 = y - sy1;
+      dx2 = 1.0 - dx1; dy2 = 1.0 - dy1;
+
+      dst[pos ++] = (dy2 * (dx2 * src[sy1 * width + sx1] + dx1 * src[sy1 * width + sx2]) + 
+                     dy1 * (dx2 * src[sy2 * width + sx1] + dx1 * src[sy2 * width + sx2]) + 0.5) >>> 0;
     }
   }
+  
+  imageDst.width = warpSize;
+  imageDst.height = warpSize;
 
-  return candidates;
+  return imageDst;
+};  
+
+// 3. Усреднение площади ячеек + допуск по Хэммингу <= 2
+AR.Detector.prototype.getMarker = function(imageSrc, candidate){
+  var cellSize = (imageSrc.width / 7) >>> 0; // При warpSize=140 размер ячейки равен 20 пикселей
+  var bits = [], rotations = [], distances = [],
+      pair = {first: Infinity, second: 0},
+      i, j, x, y;
+
+  // Попиксельный разбор матрицы 5x5 внутри рамки
+  for (i = 0; i < 5; ++ i){
+    bits[i] = [];
+    for (j = 0; j < 5; ++ j){
+      // Границы текущей ячейки сдвинуты на 1 (пропуск внешней черной рамки)
+      var startX = (j + 1) * cellSize;
+      var startY = (i + 1) * cellSize;
+    
+      // Выделяем центральное окно (50% от площади ячейки) для защиты от размытия ребер
+      var innerStartX = startX + (cellSize >> 2);
+      var innerStartY = startY + (cellSize >> 2);
+      var innerEndX = startX + ((cellSize * 3) >> 2);
+      var innerEndY = startY + ((cellSize * 3) >> 2);
+         
+      var sum = 0, count = 0;
+
+      for (y = innerStartY; y < innerEndY; ++y) {
+        for (x = innerStartX; x < innerEndX; ++x) {
+          sum += imageSrc.data[y * imageSrc.width + x];
+          count++;
+        }
+      }
+
+      // Записываем бит на основе среднего значения по площади
+      bits[i][j] = (sum / count) > 128 ? 1 : 0;
+    }  
+  }
+
+  rotations[0] = bits;
+  distances[0] = this.hammingDistance( rotations[0] );
+
+  pair.first = distances[0];
+  pair.second = 0;
+
+  for (i = 1; i < 4; ++ i){
+    rotations[i] = this.rotate( rotations[i - 1] );
+    distances[i] = this.hammingDistance( rotations[i] );
+
+    if (distances[i] < pair.first){
+      pair.first = distances[i];
+      pair.second = i;
+    }
+  }
+  
+  // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
+  if (pair.first > 2){
+    return null;
+  }
+  
+  return new AR.Marker(
+    this.mat2id( rotations[pair.second] ), 
+    this.rotate2(candidate, 4 - pair.second)
+  );  
 };
 
 AR.Detector.prototype.clockwiseCorners = function(candidates){
@@ -443,51 +527,6 @@ AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
   }
   
   return markers;
-};
-
-AR.Detector.prototype.getMarker = function(imageSrc, candidate){
-  var width = (imageSrc.width / 7) >>> 0,
-      bits = [], rotations = [], distances = [],
-      pair = {first: Infinity, second: 0},
-      i, j, square, x, y;
-
-  for (i = 0; i < 5; ++ i){
-    bits[i] = [];
-    
-    for (j = 0; j < 5; ++ j){
-      // Рассчитываем индекс центрального пикселя для текущей внутренней ячейки
-      x = (((j + 1) * width) + (width >> 1)) >>> 0;
-      y = (((i + 1) * width) + (width >> 1)) >>> 0;
-      
-      bits[i][j] = imageSrc.data[y * imageSrc.width + x] > 128? 1: 0;
-    }
-  }    
-
-  rotations[0] = bits;
-  distances[0] = this.hammingDistance( rotations[0] );
-  
-  pair.first = distances[0];
-  pair.second = 0;
-  
-  // Проверяем все 4 возможных разворота маркера в пространстве
-  for (i = 1; i < 4; ++ i){
-    rotations[i] = this.rotate( rotations[i - 1] );
-    distances[i] = this.hammingDistance( rotations[i] );
-    
-    if (distances[i] < pair.first){
-      pair.first = distances[i];
-      pair.second = i;
-    }
-  }
-
-  // Для кастомного словаря Хэмминг должен дать 0 ошибок
-  if (0 !== pair.first){
-    return null;
-  }
-
-  return new AR.Marker(
-    this.mat2id( rotations[pair.second] ), 
-    this.rotate2(candidate, 4 - pair.second) );
 };
 
 AR.Detector.prototype.hammingDistance = function(bits){

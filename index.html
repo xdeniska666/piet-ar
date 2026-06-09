@@ -436,7 +436,7 @@
                 // Принудительно выставляем размеры холста
                 if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
                     canvas.width = targetWidth;
-                    canvas.width = targetWidth;
+                    canvas.height = targetHeight;
                     resCounter.innerText = `Матрица: ${targetWidth}x${targetHeight}`;
                     logToScreen(`Геометрия выровнена: ${targetWidth}x${targetHeight}`, 'log-success');
                 }    
@@ -475,10 +475,10 @@
                 `;
 
                 // Подсвечиваем всё, что вообще смогла зацепить камера на Шаге 2
-                if (detector.polys && detector.polys.length > 0) {
-                    ctx.strokeStyle = "rgba(255, 183, 3, 0.6)";
+                if (detector.candidates && detector.candidates.length > 0) {
+                    ctx.strokeStyle = "rgba(255, 183, 3, 0.4)";
                     ctx.lineWidth = 2;
-                    detector.polys.forEach(poly => {
+                    detector.candidates.forEach(poly => {
                         if (poly.length > 0) {
                             ctx.beginPath();
                             ctx.moveTo(poly[0].x, poly[0].y);
@@ -492,20 +492,8 @@
                 }    
                 
                 // Если маркер успешно распознан
-                if (markers.length > 0) {
-                    if (typeof drawGlowingOutline === 'function') {
-                        drawGlowingOutline(markers);
-                    } else {    
-                        logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
-                        const corners = markers[0].corners;
-                        ctx.strokeStyle = "#00ff87";
-                        ctx.lineWidth = 4;
-                        ctx.beginPath();
-                        ctx.moveTo(corners[0].x, corners[0].y);
-                        for (let i = 1; i < 4; i++) { ctx.lineTo(corners[i].x, corners[i].y); }
-                        ctx.closePath();
-                        ctx.stroke();
-                    }
+                if (markers && markers.length > 0) {
+                    drawGlowingOutline(markers);
                 }
 
             } catch (err) {
