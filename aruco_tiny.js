@@ -344,8 +344,7 @@ AR.Detector.prototype.detect = function(image){
 
   this.polys = this.findCandidates(this.contours, image.width * 0.2, 0.05, false);
   this.stage_candidates = this.polys.length; // Сколько из них подошли под базовый четырехугольник
-  
-  return this.findMarkers(this.polys, this.thres);
+  return this.findMarkers(this.thres, this.polys, 49);
 };
 
 AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){

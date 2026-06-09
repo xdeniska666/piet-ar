@@ -429,21 +429,9 @@
                     return;
                 }
 
-                // АВТОМАТИЧЕСКАЯ КОРРЕКЦИЯ ОРИЕНТАЦИИ:
-                // Проверяем, как именно мобильный браузер отдает стороны, 
-                // и гарантируем строгое сохранение пропорций 1:1.
-                const scaleFactor = 0.5;
-                let targetWidth, targetHeight;
-
-                if (video.videoWidth > video.videoHeight) {
-                    // Если поток горизонтальный (или перевернутый браузером)
-                    targetWidth = Math.round(video.videoWidth * scaleFactor);
-                    targetHeight = Math.round(video.videoHeight * scaleFactor);
-                } else {
-                    // Если поток честный вертикальный (как твой 480х640)
-                    targetWidth = Math.round(video.videoWidth * scaleFactor);
-                    targetHeight = Math.round(video.videoHeight * scaleFactor);
-                }       
+                // Работаем в честном разрешении 640x480 без scaleFactor, чтобы не ломать детекцию контуров
+                const targetWidth = video.videoWidth;
+                const targetHeight = video.videoHeight;     
 
                 // Принудительно выставляем размеры холста
                 if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -488,7 +476,7 @@
 
                 // Подсвечиваем всё, что вообще смогла зацепить камера на Шаге 2
                 if (detector.polys && detector.polys.length > 0) {
-                    ctx.strokeStyle = "rgba(255, 183, 3, 0.8)";
+                    ctx.strokeStyle = "rgba(255, 183, 3, 0.6)";
                     ctx.lineWidth = 2;
                     detector.polys.forEach(poly => {
                         if (poly.length > 0) {
@@ -505,22 +493,23 @@
                 
                 // Если маркер успешно распознан
                 if (markers.length > 0) {
-                    logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
-
-                    const corners = markers[0].corners;
-                    ctx.strokeStyle = "#00ff87";
-                    ctx.lineWidth = 4;
-                    ctx.beginPath();
-                    ctx.moveTo(corners[0].x, corners[0].y);
-                    for (let i = 1; i < 4; i++) {
-                        ctx.lineTo(corners[i].x, corners[i].y);
+                    if (typeof drawGlowingOutline === 'function') {
+                        drawGlowingOutline(markers);
+                    } else {    
+                        logToScreen(`✅ МАРКЕР НАЙДЕН! ID: ${markers[0].id}`, 'log-success');
+                        const corners = markers[0].corners;
+                        ctx.strokeStyle = "#00ff87";
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(corners[0].x, corners[0].y);
+                        for (let i = 1; i < 4; i++) { ctx.lineTo(corners[i].x, corners[i].y); }
+                        ctx.closePath();
+                        ctx.stroke();
                     }
-                    ctx.closePath();
-                    ctx.stroke();
                 }
-                
+
             } catch (err) {
-                logToScreen(`Ошибка выравнивания: ${err.message}`, 'log-error');
+                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error');
                 console.error(err);
             }
 
