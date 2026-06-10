@@ -232,8 +232,10 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
 
   var m = CV.getPerspectiveTransform(contour, warpSize);
 
-  imageDst.data = new Uint8Array(warpSize * warpSize);
-  var dst = imageDst.data;
+  if (!imageDst.data || imageDst.data.length !== warpSize * warpSize) {
+    imageDst.data = new Uint8Array(warpSize * warpSize);
+  }
+  var dst = imageDst.data;  
 
   for (i = 0; i < warpSize; ++ i){
     for (j = 0; j < warpSize; ++ j){
