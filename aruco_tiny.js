@@ -405,20 +405,38 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
       pair = {first: Infinity, second: 0},
       i, j, x, y;
 
-  // Попиксельный разбор матрицы 5x5 внутри рамки
+  // 1. НАХОДИМ ЛОКАЛЬНЫЙ ПОРОГ ДЛЯ МАРКЕРА
+  // Сканируем внутреннюю область, чтобы определить реальный диапазон черного и белого
+  var minVal = 255;
+  var maxVal = 0;
+  var len = imageSrc.data.length;
+  
+  for (i = 0; i < len; i++) {
+    var v = imageSrc.data[i];
+    if (v < minVal) minVal = v;
+    if (v > maxVal) maxVal = v;
+  }
+  
+  // Если маркер слишком блеклый или нет контраста — выходим
+  if (maxVal - minVal < 30) {       
+    return null;
+  }  
+  
+  // Динамический порог: ровно посередине между самым черным и самым белым пикселем маркера
+  var localThreshold = minVal + ((maxVal - minVal) >> 1);
+
+  // 2. ЧИТАЕМ БИТЫ С ИСПОЛЬЗОВАНИЕМ ЛОКАЛЬНОГО ПОРОГА
   for (i = 0; i < 5; ++ i){
     bits[i] = [];
     for (j = 0; j < 5; ++ j){
-      // Границы текущей ячейки сдвинуты на 1 (пропуск внешней черной рамки)
       var startX = (j + 1) * cellSize;
       var startY = (i + 1) * cellSize;
     
-      // Выделяем центральное окно (50% от площади ячейки) для защиты от размытия ребер
       var innerStartX = startX + (cellSize >> 2);
       var innerStartY = startY + (cellSize >> 2);
       var innerEndX = startX + ((cellSize * 3) >> 2);
       var innerEndY = startY + ((cellSize * 3) >> 2);
-         
+
       var sum = 0, count = 0;
 
       for (y = innerStartY; y < innerEndY; ++y) {
@@ -428,8 +446,8 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
         }
       }
 
-      // Записываем бит на основе среднего значения по площади
-      bits[i][j] = (sum / count) > 128 ? 1 : 0;
+      // Сравниваем среднее значение ячейки с вычисленным локальным порогом
+      bits[i][j] = (sum / count) > localThreshold ? 1 : 0;
     }  
   }
 
@@ -448,12 +466,7 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
       pair.second = i;
     }
   }
-  
-  if (pair.first > 2 && Math.random() < 0.05) { // выводим ~5% кадров, чтобы не спамить
-    console.log("Сканированная матрица битов:");
-    console.log(rotations[0].map(row => row.join(" ")).join("\n"));
-  }
-
+    
   // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
   if (pair.first > 2){
     return null;
