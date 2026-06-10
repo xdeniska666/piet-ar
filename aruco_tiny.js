@@ -335,7 +335,7 @@ AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
   // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.threshold(this.grey, this.thres, 100);
+  CV.threshold(this.grey, this.thres, CV.otsu(this.grey));
 
   this.contours = CV.findContours(this.thres, this.binary);
 
@@ -344,13 +344,9 @@ AR.Detector.prototype.detect = function(image){
 
   // Безопасный вызов: проверяем наличие в прототипе, иначе ищем в глобальном контексте
   var findCandidatesFn = this.findCandidates || (typeof findCandidates === 'function' ? findCandidates : null);
-
-  if (!findCandidatesFn) {
-    console.error("Критическая ошибка: Функция findCandidates не найдена в структуре скрипта!");
-    return [];
-  }
+  if (!findCandidatesFn) return [];
     
-  var candidates = this.findCandidates(this.contours, image.width * 0.1, 0.05, 10);
+  var candidates = findCandidatesFn.call(this, this.contours, image.width * 0.1, 0.05, 10);
   candidates = this.clockwiseCorners(candidates);
   candidates = this.notTooNear(candidates, 10);
   
@@ -453,6 +449,11 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
     }
   }
   
+  if (pair.first > 2 && Math.random() < 0.05) { // выводим ~5% кадров, чтобы не спамить
+    console.log("Сканированная матрица битов:");
+    console.log(rotations[0].map(row => row.join(" ")).join("\n"));
+  }
+
   // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
   if (pair.first > 2){
     return null;
