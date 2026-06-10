@@ -228,19 +228,30 @@ CV.countNonZero = function(imageSrc, square){
 };
 
 CV.warp = function(imageSrc, imageDst, contour, warpSize){
-  var src = imageSrc.data, dst = imageDst.data, width = imageSrc.width, height = imageSrc.height, pos = 0, sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2, z, x, y, i, j;
+  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2, z, x, y, i, j;
 
   var m = CV.getPerspectiveTransform(contour, warpSize);
+
+  imageDst.data = new Uint8Array(warpSize * warpSize);
+  var dst = imageDst.data;
 
   for (i = 0; i < warpSize; ++ i){
     for (j = 0; j < warpSize; ++ j){
       z = m[6] * j + m[7] * i + m[8];
+      if (z === 0) continue;
+
       x = (m[0] * j + m[1] * i + m[2]) / z;
       y = (m[3] * j + m[4] * i + m[5]) / z;
       
       sx1 = x >>> 0; sy1 = y >>> 0;
       sx2 = sx1 === width - 1? sx1: sx1 + 1;
       sy2 = sy1 === height - 1? sy1: sy1 + 1;
+
+      if (sx1 >= width || sy1 >= height) {
+        dst[pos ++] = 0;
+        continue;
+      }
+
       dx1 = x - sx1; dy1 = y - sy1;
       dx2 = 1.0 - dx1; dy2 = 1.0 - dy1;
       
@@ -400,48 +411,46 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
 
 // 3. Усреднение площади ячеек + допуск по Хэммингу <= 2
 AR.Detector.prototype.getMarker = function(imageSrc, candidate){
-  var cellSize = (imageSrc.width / 7) >>> 0; // При warpSize=140 размер ячейки равен 20 пикселей
+  var width = imageSrc.width;
+  var cellSize = width / 7;
   var bits = [], rotations = [], distances = [],
       pair = {first: Infinity, second: 0},
       i, j, x, y;
 
   // 1. НАХОДИМ ЛОКАЛЬНЫЙ ПОРОГ ДЛЯ МАРКЕРА
   // Сканируем внутреннюю область, чтобы определить реальный диапазон черного и белого
-  var minVal = 255;
-  var maxVal = 0;
-  var len = imageSrc.data.length;
+  var minVal = 255, maxVal = 0;
+  var data = imageSrc.data;
+  var len = data.length;
   
   for (i = 0; i < len; i++) {
-    var v = imageSrc.data[i];
-    if (v < minVal) minVal = v;
-    if (v > maxVal) maxVal = v;
+    if (data[i] < minVal) minVal = data[i];
+    if (data[i] > maxVal) maxVal = data[i];
   }
   
   // Если маркер слишком блеклый или нет контраста — выходим
-  if (maxVal - minVal < 30) {       
-    return null;
-  }  
+  if (maxVal - minVal < 20) return null;  
   
   // Динамический порог: ровно посередине между самым черным и самым белым пикселем маркера
-  var localThreshold = minVal + ((maxVal - minVal) >> 1);
+  var localThreshold = minVal + ((maxVal - minVal) / 2);
 
   // 2. ЧИТАЕМ БИТЫ С ИСПОЛЬЗОВАНИЕМ ЛОКАЛЬНОГО ПОРОГА
   for (i = 0; i < 5; ++ i){
     bits[i] = [];
     for (j = 0; j < 5; ++ j){
-      var startX = (j + 1) * cellSize;
-      var startY = (i + 1) * cellSize;
+      var cellLeft = (j + 1) * cellSize;
+      var cellTop = (i + 1) * cellSize;
     
-      var innerStartX = startX + (cellSize >> 2);
-      var innerStartY = startY + (cellSize >> 2);
-      var innerEndX = startX + ((cellSize * 3) >> 2);
-      var innerEndY = startY + ((cellSize * 3) >> 2);
+      var startX = Math.floor(cellLeft + cellSize * 0.3);
+      var endX   = Math.floor(cellLeft + cellSize * 0.7);
+      var startY = Math.floor(cellTop + cellSize * 0.3);
+      var endY   = Math.floor(cellTop + cellSize * 0.7);
 
       var sum = 0, count = 0;
 
-      for (y = innerStartY; y < innerEndY; ++y) {
-        for (x = innerStartX; x < innerEndX; ++x) {
-          sum += imageSrc.data[y * imageSrc.width + x];
+      for (y = startY; y < endY; ++y) {
+        for (x = startX; x < endX; ++x) {
+          sum += data[y * width + x];
           count++;
         }
       }
