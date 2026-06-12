@@ -372,12 +372,13 @@ AR.Detector.prototype.detect = function(image){
 
 // 2. Билинейная интерполяция с защитой от мусора в памяти и деления на ноль
 CV.warp = function(imageSrc, imageDst, contour, warpSize){
-  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2, z, x, y, i, j;
+  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, z, x, y, i, j;
 
   var m = CV.getPerspectiveTransform(contour, warpSize);
 
-  // Выделяем чистый массив под конкретный размер текущего кадра
-  imageDst.data = new Uint8Array(warpSize * warpSize);
+  if (!imageDst.data || imageDst.data.length !== warpSize * warpSize) {
+    imageDst.data = new Uint8Array(warpSize * warpSize);
+  }  
   var dst = imageDst.data;
 
   for (i = 0; i < warpSize; ++ i){
@@ -385,23 +386,18 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
       z = m[6] * j + m[7] * i + m[8];
       if (z === 0) continue; // Защита от схлопывания перспективы
 
-      x = (m[0] * j + m[1] * i + m[2]) / z;
-      y = (m[3] * j + m[4] * i + m[5]) / z;
+      // Находим точные исходные координаты пикселя
+      x = ((m[0] * j + m[1] * i + m[2]) / z) >>> 0;
+      x = ((m[0] * j + m[1] * i + m[2]) / z) >>> 0;
 
-      sx1 = x >>> 0; sy1 = y >>> 0;
-      sx2 = sx1 === width - 1? sx1: sx1 + 1;
-      sy2 = sy1 === height - 1? sy1: sy1 + 1;
-
-      if (sx1 >= width || sy1 >= height) {
+      // Защита от выхода за границы кадра касмеры
+      if (x >= width || y >= height) {
         dst[pos ++] = 0;
         continue;
       }
-      
-      dx1 = x - sx1; dy1 = y - sy1;
-      dx2 = 1.0 - dx1; dy2 = 1.0 - dy1;
 
-      dst[pos ++] = (dy2 * (dx2 * src[sy1 * width + sx1] + dx1 * src[sy1 * width + sx2]) + 
-                     dy1 * (dx2 * src[sy2 * width + sx1] + dx1 * src[sy2 * width + sx2]) + 0.5) >>> 0;
+      // Метод ближайшего соседа: берем чистый пиксель без интерполяции и размытия
+      dst[pos ++] = src[y * width + x];
     }
   }
   
@@ -411,7 +407,6 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
   return imageDst;
 };  
 
-// 3. Усреднение площади ячеек + допуск по Хэммингу <= 2
 AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   var width = imageSrc.width;
   var cellSize = width / 7;
@@ -419,46 +414,33 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
       pair = {first: Infinity, second: 0},
       i, j, x, y;
 
-  // 1. НАХОДИМ ЛОКАЛЬНЫЙ ПОРОГ ДЛЯ МАРКЕРА
-  // Сканируем внутреннюю область, чтобы определить реальный диапазон черного и белого
-  var minVal = 255, maxVal = 0;
   var data = imageSrc.data;
-  var len = data.length;
   
-  for (i = 0; i < len; i++) {
-    if (data[i] < minVal) minVal = data[i];
-    if (data[i] > maxVal) maxVal = data[i];
-  }
-  
-  // Если маркер слишком блеклый или нет контраста — выходим
-  if (maxVal - minVal < 20) return null;  
-  
-  // Динамический порог: ровно посередине между самым черным и самым белым пикселем маркера
-  var localThreshold = minVal + ((maxVal - minVal) / 2);
-
-  // 2. ЧИТАЕМ БИТЫ С ИСПОЛЬЗОВАНИЕМ ЛОКАЛЬНОГО ПОРОГА
+  // Читаем матрицу 5x5, заглядывая в самый центр каждой ячейки (окно 30% от площади)
   for (i = 0; i < 5; ++ i){
     bits[i] = [];
     for (j = 0; j < 5; ++ j){
       var cellLeft = (j + 1) * cellSize;
       var cellTop = (i + 1) * cellSize;
     
-      var startX = Math.floor(cellLeft + cellSize * 0.3);
-      var endX   = Math.floor(cellLeft + cellSize * 0.7);
-      var startY = Math.floor(cellTop + cellSize * 0.3);
-      var endY   = Math.floor(cellTop + cellSize * 0.7);
+      var startX = Math.floor(cellLeft + cellSize * 0.35);
+      var endX   = Math.floor(cellLeft + cellSize * 0.65);
+      var startY = Math.floor(cellTop + cellSize * 0.35);
+      var endY   = Math.floor(cellTop + cellSize * 0.65);
 
-      var sum = 0, count = 0;
+      var whiteCount = 0, totalCount = 0;
 
       for (y = startY; y < endY; ++y) {
         for (x = startX; x < endX; ++x) {
-          sum += data[y * width + x];
-          count++;
+          if (data[y * width + x] > 128) {
+            whiteCount++;
+          }
+          totalCount++;
         }
       }
 
-      // Сравниваем среднее значение ячейки с вычисленным локальным порогом
-      bits[i][j] = (sum / count) > localThreshold ? 1 : 0;
+      // Мажоритарный выбор: если больше половины пикселей в центре белые — это 1
+      bits[i][j] = (whiteCount / totalCount) > 0.5 ? 1 : 0;
     }  
   }
 
