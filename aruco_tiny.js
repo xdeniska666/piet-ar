@@ -348,7 +348,7 @@ AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
   // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.threshold(this.grey, this.thres, CV.otsu(this.grey));
+  CV.threshold(this.grey, this.thres, 110);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
@@ -359,7 +359,7 @@ AR.Detector.prototype.detect = function(image){
   var findCandidatesFn = this.findCandidates || (typeof findCandidates === 'function' ? findCandidates : null);
   if (!findCandidatesFn) return [];
     
-  var candidates = findCandidatesFn.call(this, this.contours, image.width * 0.1, 0.05, 10);
+  var candidates = findCandidatesFn.call(this, this.contours, image.width * 0.05, 0.05, 10);
   candidates = this.clockwiseCorners(candidates);
   candidates = this.notTooNear(candidates, 10);
   
@@ -388,7 +388,7 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
 
       // Находим точные исходные координаты пикселя
       x = ((m[0] * j + m[1] * i + m[2]) / z) >>> 0;
-      x = ((m[0] * j + m[1] * i + m[2]) / z) >>> 0;
+      y = ((m[3] * j + m[4] * i + m[5]) / z) >>> 0;
 
       // Защита от выхода за границы кадра касмеры
       if (x >= width || y >= height) {
