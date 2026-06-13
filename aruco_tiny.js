@@ -423,10 +423,10 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
       var cellLeft = (j + 1) * cellSize;
       var cellTop = (i + 1) * cellSize;
     
-      var startX = Math.floor(cellLeft + cellSize * 0.35);
-      var endX   = Math.floor(cellLeft + cellSize * 0.65);
-      var startY = Math.floor(cellTop + cellSize * 0.35);
-      var endY   = Math.floor(cellTop + cellSize * 0.65);
+      var startX = Math.floor(cellLeft + cellSize * 0.2);
+      var endX   = Math.floor(cellLeft + cellSize * 0.8);
+      var startY = Math.floor(cellTop + cellSize * 0.2);
+      var endY   = Math.floor(cellTop + cellSize * 0.8);
 
       var whiteCount = 0, totalCount = 0;
 
