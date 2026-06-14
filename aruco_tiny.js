@@ -348,7 +348,7 @@ AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
   // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.threshold(this.grey, this.thres, 110);
+  CV.adaptiveThreshold(this.grey, this.thres, 2, 7);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
