@@ -527,13 +527,16 @@ AR.Detector.prototype.notTooNear = function(candidates, minDist){
 };
 
 AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
-  var markers = [], len = candidates.length, candidate, marker, i;
+  var markers = [], candidate, imageDst, marker, i;
 
   for (i = 0; i < candidates.length; ++ i){
     candidate = candidates[i];
 
-    // Проецируем перспективу (вырезаем квадрат маркера 140x140)
+    // Вырезаем серое изображение из серого кадра
     imageDst = CV.warp(imageSrc, this.homography, candidate, warpSize);
+
+    // Бинаризируем ТОЛЬКО маленький кусочек 140x140. Это не садит FPS!
+    CV.threshold(imageDst, imageDst, CV.otsu(imageDst));
 
     marker = this.getMarker(imageDst, candidate);
     if (marker){
