@@ -529,14 +529,13 @@ AR.Detector.prototype.notTooNear = function(candidates, minDist){
 AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
   var markers = [], len = candidates.length, candidate, marker, i;
 
-  for (i = 0; i < len; ++ i){
+  for (i = 0; i < candidates.length; ++ i){
     candidate = candidates[i];
 
-    CV.warp(imageSrc, this.homography, candidate, warpSize);
-  
-    CV.threshold(this.homography, this.homography, CV.otsu(this.homography) );
+    // Проецируем перспективу (вырезаем квадрат маркера 140x140)
+    imageDst = CV.warp(imageSrc, this.homography, candidate, warpSize);
 
-    marker = this.getMarker(this.homography, candidate);
+    marker = this.getMarker(imageDst, candidate);
     if (marker){
       markers.push(marker);
     }
