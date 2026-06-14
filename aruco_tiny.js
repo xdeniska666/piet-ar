@@ -461,10 +461,11 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   }
     
   // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
-  if (pair.first > 2){
+  /*if (pair.first > 2){
     return null;
   }
-  
+  */
+
   return new AR.Marker(
     this.mat2id( rotations[pair.second] ), 
     this.rotate2(candidate, 4 - pair.second)
