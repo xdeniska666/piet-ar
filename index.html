@@ -15,8 +15,22 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_14_v3"></script>
-    
+    <script src="aruco_tiny.js?v=2026_06_14_v4"></script>
+
+    <script>
+        // Принудительный цикл проверки, который работает прямо из index.html
+        setInterval(function() {
+            if (typeof logToScreen === 'function') {
+                logToScreen("=== ТЕКУЩАЯ СБОРКА: V4 ===");
+                if (typeof AR !== 'undefined' && AR.Detector) {
+                    logToScreen("Библиотека AR: Загружена");
+                } else {
+                    logToScreen("Библиотека AR: ОШИБКА ЗАГРУЗКИ");
+                }
+            }
+        }, 2000);                
+    </script>
+
     <style>
         :root {
             --primary: #00f3ff;
