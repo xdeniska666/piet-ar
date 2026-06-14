@@ -348,7 +348,7 @@ AR.Detector.prototype.detect = function(image){
   CV.grayscale(image, this.grey);
 
   // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.adaptiveThreshold(this.grey, this.thres, 2, 7);
+  CV.adaptiveThreshold(this.grey, this.thres, 2, 31);
 
   this.contours = CV.findContours(this.thres, this.binary);
 
@@ -364,17 +364,14 @@ AR.Detector.prototype.detect = function(image){
   candidates = this.notTooNear(candidates, 10);
   
   this.stage_candidates = candidates.length;
-
-  // ВЫВОД ОТЛАДКИ НА ЭКРАН (Раз в 30 кадров, чтобы не спамить)
-  if (!window.logCounter) window.logCounter = 0;
-  window.logCounter++;
-  if (window.logCounter % 30 === 0 && typeof logToScreen === 'function') {
-    logToScreen("--- ДИАГНОСТИКА ---");
-    logToScreen("Всего контуров: " + this.stage_total_contours);
-    logToScreen("Кандидатов (квадратов): " + this.stage_candidates);
-  }  
-
   this.candidates = candidates;
+
+  // Упрощаем вывод отладки: выводим КАЖДЫЙ кадр, без деления на 30, 
+  // чтобы сразу видеть динамику, пока чиним FPS
+  if (typeof logToScreen === 'function') {
+    logToScreen("Контуров: " + this.stage_total_contours + " | Квадратов: " + this.stage_candidates);
+  } 
+
   // Передаем размер 140 (140 / 7 ячеек = ровно 20 пикселей на одну ячейку маркера)
   return this.findMarkers(this.thres, candidates, 140);
 };
