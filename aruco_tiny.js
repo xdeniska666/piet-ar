@@ -365,6 +365,15 @@ AR.Detector.prototype.detect = function(image){
   
   this.stage_candidates = candidates.length;
 
+  // ВЫВОД ОТЛАДКИ НА ЭКРАН (Раз в 30 кадров, чтобы не спамить)
+  if (!window.logCounter) window.logCounter = 0;
+  window.logCounter++;
+  if (window.logCounter % 30 === 0 && typeof logToScreen === 'function') {
+    logToScreen("--- ДИАГНОСТИКА ---");
+    logToScreen("Всего контуров: " + this.stage_total_contours);
+    logToScreen("Кандидатов (квадратов): " + this.stage_candidates);
+  }  
+
   this.candidates = candidates;
   // Передаем размер 140 (140 / 7 ячеек = ровно 20 пикселей на одну ячейку маркера)
   return this.findMarkers(this.thres, candidates, 140);
@@ -465,6 +474,13 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
     return null;
   }
   */
+
+  // Выводим в лог структуру первого найденного четырехугольника
+  if (window.logCounter % 30 === 0 && typeof logToScreen === 'function') {
+    var matrixString = bits.map(row => row.join("")).join(" | ");
+    logToScreen("Матрица битов: " + matrixString);
+    logToScreen("Мин. Хэмминг: " + pair.first);
+  }  
 
   return new AR.Marker(
     this.mat2id( rotations[pair.second] ), 
