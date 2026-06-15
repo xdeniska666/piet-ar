@@ -15,13 +15,13 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_15_v7"></script>
+    <script src="aruco_tiny.js?v=2026_06_15_v8"></script>
 
     <script>
         // Принудительный цикл проверки, который работает прямо из index.html
         setInterval(function() {
             if (typeof logToScreen === 'function') {
-                logToScreen("=== ТЕСТ СБОРКА: V7 (ОПТИМИЗАЦИЯ FPS) ===");
+                logToScreen("=== СБОРКА: V8 (ПОРТРЕТНАЯ ГЕОМЕТРИЯ) ===");
             }
         }, 2000);                
     </script>
@@ -451,8 +451,8 @@
                 }    
 
                 //Для детектора мы принудительно жмем кадр до 320x240
-                const renderWidth = 320;
-                const renderHeight = 240;
+                const renderWidth = 240;
+                const renderHeight = 320;
 
                 // Перестраиваем холст под легкий размер перед отрисовкой
                 canvas.width = renderWidth;
