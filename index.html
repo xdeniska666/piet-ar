@@ -15,13 +15,13 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_15_v6"></script>
+    <script src="aruco_tiny.js?v=2026_06_15_v7"></script>
 
     <script>
         // Принудительный цикл проверки, который работает прямо из index.html
         setInterval(function() {
             if (typeof logToScreen === 'function') {
-                logToScreen("=== ТЕСТ СБОРКА: V6 (ДЕТЕКТОР ОТКЛЮЧЕН) ===");
+                logToScreen("=== ТЕСТ СБОРКА: V7 (ОПТИМИЗАЦИЯ FPS) ===");
             }
         }, 2000);                
     </script>
@@ -450,9 +450,19 @@
                     logToScreen(`Геометрия выровнена: ${targetWidth}x${targetHeight}`, 'log-success');
                 }    
 
-                // Рисуем кадр
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                //Для детектора мы принудительно жмем кадр до 320x240
+                const renderWidth = 320;
+                const renderHeight = 240;
+
+                // Перестраиваем холст под легкий размер перед отрисовкой
+                canvas.width = renderWidth;
+                canvas.height = renderHeight;
+
+                // Рисуем сжатый кадр
+                ctx.drawImage(video, 0, 0, renderWidth, renderHeight);
+
+                // Забираем легкие данные
+                const imageData = ctx.getImageData(0, 0, renderWidth, renderHeight);
 
                 // Считаем FPS
                 frameCount++;
@@ -465,9 +475,7 @@
                 
                 // Запуск детекции
                 const t0 = performance.now();
-                //const markers = detector.detect(imageData);
-                // Временно подсовываем пустой массив, чтобы скрипт не падал:
-                const markers = [];
+                const markers = detector.detect(imageData);
                 const dt = Math.round(performance.now() - t0);
 
                 // Вытаскиваем аудит конвейера
