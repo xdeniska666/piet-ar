@@ -15,18 +15,13 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_14_v5"></script>
+    <script src="aruco_tiny.js?v=2026_06_15_v6"></script>
 
     <script>
         // Принудительный цикл проверки, который работает прямо из index.html
         setInterval(function() {
             if (typeof logToScreen === 'function') {
-                logToScreen("=== ТЕКУЩАЯ СБОРКА: V4 ===");
-                if (typeof AR !== 'undefined' && AR.Detector) {
-                    logToScreen("Библиотека AR: Загружена");
-                } else {
-                    logToScreen("Библиотека AR: ОШИБКА ЗАГРУЗКИ");
-                }
+                logToScreen("=== ТЕСТ СБОРКА: V6 (ДЕТЕКТОР ОТКЛЮЧЕН) ===");
             }
         }, 2000);                
     </script>
@@ -470,7 +465,9 @@
                 
                 // Запуск детекции
                 const t0 = performance.now();
-                const markers = detector.detect(imageData);
+                //const markers = detector.detect(imageData);
+                // Временно подсовываем пустой массив, чтобы скрипт не падал:
+                const markers = [];
                 const dt = Math.round(performance.now() - t0);
 
                 // Вытаскиваем аудит конвейера
