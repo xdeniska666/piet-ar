@@ -15,13 +15,13 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_15_v8"></script>
+    <script src="aruco_tiny.js?v=2026_06_15_v9"></script>
 
     <script>
         // Принудительный цикл проверки, который работает прямо из index.html
         setInterval(function() {
             if (typeof logToScreen === 'function') {
-                logToScreen("=== СБОРКА: V8 (ПОРТРЕТНАЯ ГЕОМЕТРИЯ) ===");
+                logToScreen("=== СТАТУС: СБОРКА V9 ===");
             }
         }, 2000);                
     </script>
@@ -438,27 +438,19 @@
                     return;
                 }
 
-                // Работаем в честном разрешении 640x480 без scaleFactor, чтобы не ломать детекцию контуров
-                const targetWidth = video.videoWidth;
-                const targetHeight = video.videoHeight;     
+                // ЖЕСТКО ЗАДАЕМ ЛЕГКОЕ ПОРТРЕТНОЕ РАЗРЕШЕНИЕ ДЛЯ ВСЕГО КОНВЕЙЕРА
+                const renderWidth = 240;
+                const renderHeight = 320;   
 
                 // Принудительно выставляем размеры холста
-                if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-                    canvas.width = targetWidth;
-                    canvas.height = targetHeight;
-                    resCounter.innerText = `Матрица: ${targetWidth}x${targetHeight}`;
-                    logToScreen(`Геометрия выровнена: ${targetWidth}x${targetHeight}`, 'log-success');
-                }    
+                if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
+                    canvas.width = renderWidth;
+                    canvas.height = renderHeight;
+                    resCounter.innerText = `Матрица: ${renderWidth}x${renderHeight}`;
+                    logToScreen(`Геометрия выровнена под оптимизацию: ${renderWidth}x${renderHeight}`, 'log-success');
+                }
 
-                //Для детектора мы принудительно жмем кадр до 320x240
-                const renderWidth = 240;
-                const renderHeight = 320;
-
-                // Перестраиваем холст под легкий размер перед отрисовкой
-                canvas.width = renderWidth;
-                canvas.height = renderHeight;
-
-                // Рисуем сжатый кадр
+                // Рисуем кадр в оптимизированном размере
                 ctx.drawImage(video, 0, 0, renderWidth, renderHeight);
 
                 // Забираем легкие данные
