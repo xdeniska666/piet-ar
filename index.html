@@ -15,16 +15,7 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_15_v9"></script>
-
-    <script>
-        // Принудительный цикл проверки, который работает прямо из index.html
-        setInterval(function() {
-            if (typeof logToScreen === 'function') {
-                logToScreen("=== СТАТУС: СБОРКА V9 ===");
-            }
-        }, 2000);                
-    </script>
+    <script src="aruco_tiny.js?v=2026_06_15_v10"></script>
 
     <style>
         :root {
@@ -477,7 +468,8 @@
 
                 // Выводим сквозную аналитику в реальном времени
                 statusMessage.innerHTML = `
-                    <div style="line-height: 1.4; font-size: 0.85rem;">
+                    <div style="line-height: 1.4; font-size: 0.85rem; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 5px;">
+                        <div style="color: #00ecff; font-weight: bold; margin-bottom: 4px;">СБОРКА: V10 (ЧИСТЫЙ ИНТЕРФЕЙС)</div>
                         <div>🔍 Всего линий в кадре: <b>${rawContours}</b></div>
                         <div>📐 Геометрия (4 угла): <b>${candidates}</b></div>
                         <div>🆔 Распознано маркеров: <b style="color:${finalMarkers ? '#00ff87' : '#ff3838'}">${finalMarkers}</b></div>
