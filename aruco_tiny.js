@@ -366,24 +366,8 @@ AR.Detector.prototype.detect = function(image){
   this.stage_candidates = candidates.length;
   this.candidates = candidates;
 
-  // Упрощаем вывод отладки: выводим КАЖДЫЙ кадр, без деления на 30, 
-  // чтобы сразу видеть динамику, пока чиним FPS
-  if (typeof logToScreen === 'function') {
-    logToScreen("Контуров: " + this.stage_total_contours + " | Квадратов: " + this.stage_candidates);
-  } 
-
-  // ХАК ДЛЯ ПРОБИТИЯ СЭМПЛИРОВАНИЯ:
-  // Если геометрия нашла хотя бы один квадрат (кандидат), мы не вызываем findMarkers,
-  // а принудительно создаем маркер с ID = 0, чтобы сработал твой drawGlowingOutline в index.html
-  if (candidates.length > 0) {
-    var forcedMarkers = [];
-    for (var i = 0; i < candidates.length; i++) {
-      forcedMarkers.push(new AR.Marker(0, candidates[i]));
-    }
-    return forcedMarkers;
-  }
-
-  return [];
+  // Запускаем штатный конвейер вырезания маркеров
+  return this.findMarkers(this.grey, candidates, 49);
 };
 
 // 2. Билинейная интерполяция с защитой от мусора в памяти и деления на ноль

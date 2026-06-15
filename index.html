@@ -15,7 +15,7 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_15_v12"></script>
+    <script src="aruco_tiny.js?v=2026_06_15_v14"></script>
 
     <style>
         :root {
@@ -381,8 +381,16 @@
 
                 requestAnimationFrame(processFrame);
             } catch (err) {
-                statusMessage.innerHTML = "❌ Ошибка камеры: " + err.message;
-                statusMessage.style.color = "#ff3838";
+                // Выводим ошибку прямо в блок статуса огромным красным текстом!
+                statusMessage.innerHTML = `
+                    <div style="background: rgba(255,0,0,0.85); padding: 10px; border-radius: 8px; color: white;">
+                        ⚠️ КРИТИЧЕСКАЯ ОШИБКА: <br>
+                        <b style="font-family: monospace; font-size: 0.8rem; display:block; margin-top:5px;">${err.message}</b>
+                        <small style="display:block; color:#ffcccc; margin-top:2px;">${err.stack ? err.stack.split('\n')[0] : ''}</small>
+                    </div>
+                `;        
+                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error');
+                console.error(err);
             }
         }
 
@@ -458,7 +466,7 @@
                 
                 // Запуск детекции
                 const t0 = performance.now();
-                const markers = detector.detect(imageData);
+                const markers = detector.detect(imageData) || [];
                 const dt = Math.round(performance.now() - t0);
 
                 // Вытаскиваем аудит конвейера
@@ -469,7 +477,7 @@
                 // Выводим сквозную аналитику в реальном времени
                 statusMessage.innerHTML = `
                     <div style="line-height: 1.4; font-size: 0.85rem; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 5px;">
-                        <div style="color: #00ecff; font-weight: bold; margin-bottom: 4px;">СБОРКА: V10 (ЧИСТЫЙ ИНТЕРФЕЙС)</div>
+                        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 4px;">СБОРКА: V14 (МОНИТОР ОШИБОК)</div>
                         <div>🔍 Всего линий в кадре: <b>${rawContours}</b></div>
                         <div>📐 Геометрия (4 угла): <b>${candidates}</b></div>
                         <div>🆔 Распознано маркеров: <b style="color:${finalMarkers ? '#00ff87' : '#ff3838'}">${finalMarkers}</b></div>
@@ -482,11 +490,11 @@
                     ctx.strokeStyle = "rgba(255, 183, 3, 0.4)";
                     ctx.lineWidth = 2;
                     detector.candidates.forEach(poly => {
-                        if (poly.length > 0) {
+                        if (poly && poly.length === 4 && poly[0]) {
                             ctx.beginPath();
                             ctx.moveTo(poly[0].x, poly[0].y);
-                            for (let i = 1; i < poly.length; i++) {
-                                ctx.lineTo(poly[i].x, poly[i].y);
+                            for (let i = 1; i < 4; i++) {
+                                if (poly[i]) ctx.lineTo(poly[i].x, poly[i].y);
                             }
                             ctx.closePath();
                             ctx.stroke();
@@ -500,7 +508,13 @@
                 }
 
             } catch (err) {
-                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error');
+                statusMessage.innerHTML = `
+                    <div style="background: rgba(255,0,0,0.85); padding: 10px; border-radius: 8px; color: white; text-align:left;">
+                        ⚠️ СБОЙ КОНВЕЙЕРА: <br>
+                        <b style="font-family: monospace; font-size: 0.75rem; display:block; margin-top:5px; line-height:1.2;">${err.message}</b>
+                    </div>
+                `;
+                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error'); 
                 console.error(err);
             }
 
