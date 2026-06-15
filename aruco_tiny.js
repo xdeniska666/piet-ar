@@ -372,8 +372,18 @@ AR.Detector.prototype.detect = function(image){
     logToScreen("Контуров: " + this.stage_total_contours + " | Квадратов: " + this.stage_candidates);
   } 
 
-  // Передаем размер 140 (140 / 7 ячеек = ровно 20 пикселей на одну ячейку маркера)
-  return this.findMarkers(this.thres, candidates, 140);
+  // ХАК ДЛЯ ПРОБИТИЯ СЭМПЛИРОВАНИЯ:
+  // Если геометрия нашла хотя бы один квадрат (кандидат), мы не вызываем findMarkers,
+  // а принудительно создаем маркер с ID = 0, чтобы сработал твой drawGlowingOutline в index.html
+  if (candidates.length > 0) {
+    var forcedMarkers = [];
+    for (var i = 0; i < candidates.length; i++) {
+      forcedMarkers.push(new AR.Marker(0, candidates[i]));
+    }
+    return forcedMarkers;
+  }
+
+  return [];
 };
 
 // 2. Билинейная интерполяция с защитой от мусора в памяти и деления на ноль
