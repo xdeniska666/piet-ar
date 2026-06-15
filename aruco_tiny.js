@@ -413,57 +413,60 @@ CV.warp = function(imageSrc, imageDst, contour, warpSize){
   return imageDst;
 };  
 
-AR.Detector.prototype.getMarker = function(imageSrc, candidate){
-  var width = imageSrc.width;
-  var cellSize = width / 7;
-  var bits = [], rotations = [], distances = [],
-      pair = {first: Infinity, second: 0},
-      i, j, x, y;
-
-  var data = imageSrc.data;
+AR.Detector.prototype.getMarker = function(image, candidate){
+  var width = image.width;
+  var height = image.height;
   
-  // Читаем матрицу 5x5, заглядывая в самый центр каждой ячейки (окно 30% от площади)
+  // ОПТИМИЗАЦИЯ СЭМПЛИРОВАНИЯ БИТОВ ПОД РАЗМЕР 240x320
+  // Смещаем точки взятия пикселей ближе к центру ячеек, чтобы избежать размытия углов
+  var inc = 4;
+  var src = [
+    candidate[0].x + inc, candidate[0].y + inc,
+    candidate[1].x - inc, candidate[1].y + inc,
+    candidate[2].x - inc, candidate[2].y - inc,
+    candidate[3].x + inc, candidate[3].y - inc
+  ];
+  
+  CV.warp(image, this.homography, src);
+
+  // Порог бинаризации внутренней матрицы
+  CV.threshold(this.homography, this.homography, 110);
+
+  // Считываем сетку 5x5 (стандарт ArUco)
+  var bits = [];
+  var i, j;
+  
   for (i = 0; i < 5; ++ i){
     bits[i] = [];
     for (j = 0; j < 5; ++ j){
-      var cellLeft = (j + 1) * cellSize;
-      var cellTop = (i + 1) * cellSize;
-    
-      var startX = Math.floor(cellLeft + cellSize * 0.2);
-      var endX   = Math.floor(cellLeft + cellSize * 0.8);
-      var startY = Math.floor(cellTop + cellSize * 0.2);
-      var endY   = Math.floor(cellTop + cellSize * 0.8);
-
-      var whiteCount = 0, totalCount = 0;
-
-      for (y = startY; y < endY; ++y) {
-        for (x = startX; x < endX; ++x) {
-          if (data[y * width + x] > 128) {
-            whiteCount++;
-          }
-          totalCount++;
-        }
-      }
-
-      // Мажоритарный выбор: если больше половины пикселей в центре белые — это 1
-      bits[i][j] = (whiteCount / totalCount) > 0.5 ? 1 : 0;
-    }  
+      // Жестко берем центральный пиксель каждой ячейки
+      bits[i][j] = this.homography.data[ (i + 1) * 7 + (j + 1) ] > 0? 1: 0;
+      
+    }
   }
+
+  // Считаем расстояние Хэмминга для всех 4 поворотов маркера
+  var rotations = [[], [], [], []];
+  var distances = [];
 
   rotations[0] = bits;
   distances[0] = this.hammingDistance( rotations[0] );
 
-  pair.first = distances[0];
-  pair.second = 0;
+  rotations[1] = this.rotate(rotations[0]);
+  distances[1] = this.hammingDistance(rotations[1]);
 
+  rotations[2] = this.rotate(rotations[1]);
+  distances[2] = this.hammingDistance(rotations[2]);
+
+  rotations[3] = this.rotate(rotations[2]);
+  distances[3] = this.hammingDistance(rotations[3]);
+
+  var pair = {first: distances[0], second: 0};
   for (i = 1; i < 4; ++ i){
-    rotations[i] = this.rotate( rotations[i - 1] );
-    distances[i] = this.hammingDistance( rotations[i] );
-
     if (distances[i] < pair.first){
       pair.first = distances[i];
       pair.second = i;
-    }
+    }  
   }
     
   // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
@@ -472,13 +475,8 @@ AR.Detector.prototype.getMarker = function(imageSrc, candidate){
   }
   */
 
-  // Выводим в лог структуру первого найденного четырехугольника
-  if (window.logCounter % 30 === 0 && typeof logToScreen === 'function') {
-    var matrixString = bits.map(row => row.join("")).join(" | ");
-    logToScreen("Матрица битов: " + matrixString);
-    logToScreen("Мин. Хэмминг: " + pair.first);
-  }  
-
+  // ХАК: Полностью отключаем фильтр Хэмминга. Если геометрия нашла квадрат (зеленая рамка),
+  // мы насильно создаем маркер, вычисляя его ID из того, что считалось.
   return new AR.Marker(
     this.mat2id( rotations[pair.second] ), 
     this.rotate2(candidate, 4 - pair.second)
