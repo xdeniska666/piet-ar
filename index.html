@@ -15,7 +15,7 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_16_v15"></script>
+    <script src="aruco_tiny.js?v=2026_06_16_v16"></script>
 
     <style>
         :root {
@@ -132,15 +132,15 @@
         /* Панель статуса и отладки (снизу) */
         #status-panel {
             position: absolute;
-            bottom: 24px;
+            top: 100px;
             left: 20px;
             right: 20px;
             background: var(--surface);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--surface-border);
-            padding: 20px;
-            border-radius: 20px;
+            padding: 14px 20px;
+            border-radius: 16px;
             z-index: 10;
             max-width: 600px;
             margin: 0 auto;
@@ -256,10 +256,10 @@
 
         #debug-log-panel {
             position: absolute;
-            bottom: 80px;
-            left: 10px;
-            right: 10px;
-            height: 120px;
+            top: 230px;
+            left: 20px;
+            right: 20px;
+            height: 90px;
             background: rgba(13, 16, 27, 0.85);
             border: 1px solid var(--primary-glow);
             border-radius: 8px;
