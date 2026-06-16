@@ -15,7 +15,7 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_16_v17"></script>
+    <script src="aruco_tiny.js?v=2026_06_16_v18"></script>
 
     <style>
         :root {
@@ -139,8 +139,8 @@
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--surface-border);
-            padding: 14px 20px;
-            border-radius: 16px;
+            padding: 10px 16px;
+            border-radius: 14px;
             z-index: 10;
             max-width: 600px;
             margin: 0 auto;
@@ -476,12 +476,12 @@
 
                 // Выводим сквозную аналитику в реальном времени
                 statusMessage.innerHTML = `
-                    <div style="line-height: 1.4; font-size: 0.85rem; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 5px;">
-                        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 4px;">СБОРКА: V14 (МОНИТОР ОШИБОК)</div>
+                    <div style="line-height: 1.2; font-size: 0.8rem; background: rgba(0,0,0,0.7); padding: 6px; border-radius: 5px;"
+                        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 2px;">СБОРКА: V18</div>
                         <div>🔍 Всего линий в кадре: <b>${rawContours}</b></div>
                         <div>📐 Геометрия (4 угла): <b>${candidates}</b></div>
                         <div>🆔 Распознано маркеров: <b style="color:${finalMarkers ? '#00ff87' : '#ff3838'}">${finalMarkers}</b></div>
-                        <div style="color: #aaa; margin-top: 2px;">Время обработки: ${dt}ms</div>
+                        <div style="color: #aaa; margin-top: 1px;">Время обработки: ${dt}ms</div>
                     </div>
                 `;
 
