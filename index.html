@@ -15,7 +15,7 @@
         }, true);
     </script>
     
-    <script src="aruco_tiny.js?v=2026_06_16_v18"></script>
+    <script src="aruco_tiny.js?v=2026_06_16_v19"></script>
 
     <style>
         :root {
@@ -449,8 +449,17 @@
                     logToScreen(`Геометрия выровнена под оптимизацию: ${renderWidth}x${renderHeight}`, 'log-success');
                 }
 
+                // ВКЛЮЧАЕМ АППАРАТНОЕ СГЛАЖИВАНИЕ ДЛЯ УНИЧТОЖЕНИЯ РЕБРИСТОСТИ
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+
                 // Рисуем кадр в оптимизированном размере
                 ctx.drawImage(video, 0, 0, renderWidth, renderHeight);
+
+                // НЕЙРОФИЛЬТР: Слегка размываем картинку на 0.5 пикселя, чтобы склеить зазубрины лазерной печати
+                ctx.filter = "blur(0.5px)";
+                ctx.drawImage(canvas, 0, 0);
+                ctx.filter = "none"; // Сбрасываем, чтобы не портить отрисовку неона
 
                 // Забираем легкие данные
                 const imageData = ctx.getImageData(0, 0, renderWidth, renderHeight);
