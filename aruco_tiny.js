@@ -58,8 +58,8 @@ CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
 };
 
 CV.otsu = function(imageSrc){
-  var src = imageSrc.data, len = src.length, hist = [], threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0, mu, i;
-
+  var src = imageSrc.data, len = src.length, i, hist = [], threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0, mu;
+  
   for (i = 0; i < 256; ++ i){
     hist[i] = 0;
   }
@@ -171,7 +171,7 @@ CV.distancePointToLine = function(p, a, b){
 };
 
 CV.isContourConvex = function(contour){
-  var len = contour.length, dx1, dy1, dx2, dy2, curr, prev, i;
+  var len = contour.length, dx1, dy1, dx2, dy2, curr, prev, i, next;
 
   if (len < 3) return false;
 
@@ -355,22 +355,49 @@ AR.Detector.prototype.detect = function(image){
   // Сохраняем промежуточные этапы для детального аудита
   this.stage_total_contours = this.contours.length; // Сколько вообще стыков/линий нашла камера
 
+  // ГЛОБАЛЬНЫЙ МАССИВ ДЛЯ ДИАГНОСТИКИ УГЛОВ
+  window.lastGeometryLog = [];
+
   // Безопасный вызов: проверяем наличие в прототипе, иначе ищем в глобальном контексте
   var findCandidatesFn = this.findCandidates || (typeof findCandidates === 'function' ? findCandidates : null);
   if (!findCandidatesFn) return [];
     
-  var candidates = findCandidatesFn.call(this, this.contours, image.width * 0.05, 0.05, 10);
+  // Логика поиска кандидатов вручную, чтобы вытащить количество углов ДО фильтрации
+  var candidates = [];
+  for (var i = 0; i < this.contours.length; ++ i) {
+    var contour = this.contours[i];
+  
+    // Пропускаем слишком мелкие линии, как в оригинальном алгоритме
+    if (contour.length > image.width * 0.05) {
+      var approx = CV.approxPolyDP(contour, contour.length * 0.05);
+  
+      // ЗАПИСЫВАЕМ ДАННЫЕ В ДИАГНОСТИКУ: сколько углов насчитала математика на этом контуре
+      window.lastGeometryLog.push({
+        perimeter: contour.length,
+        detectedCorners: approx.length
+      });
+      
+      if (approx.length === 4) {
+        if (CV.isContourConvex(approx)) {
+          var minDist = Infinity;
+          for (var j = 0; j < 4; ++ j) {
+            var d = CV.minAreaRect(approx); // Примерная оценка, берем упрощенно
+          }
+          candidates.push(approx);
+        }
+      }
+    }
+  }
+  
   candidates = this.clockwiseCorners(candidates);
   candidates = this.notTooNear(candidates, 10);
-  
+
   this.stage_candidates = candidates.length;
   this.candidates = candidates;
 
-  // Запускаем штатный конвейер вырезания маркеров
   return this.findMarkers(this.grey, candidates, 49);
 };
 
-// 2. Билинейная интерполяция с защитой от мусора в памяти и деления на ноль
 CV.warp = function(imageSrc, imageDst, contour, warpSize){
   var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, z, x, y, i, j;
 

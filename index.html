@@ -1,588 +1,293 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Piet-AR Scan | Core</title>
+    <title>Piet-AR | Лаборатория отладки</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Подключаем премиальный шрифт Outfit и Roboto Mono для технической информации -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-        window.loadErrors = [];
-        window.addEventListener('error', function(e) {
-            window.loadErrors.push(e.message + ' (в ' + (e.filename ? e.filename.split('/').pop() : 'unknown') + ':' + e.lineno + ')');
-        }, true);
-    </script>
-    
-    <script src="aruco_tiny.js?v=2026_06_16_v19"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="aruco_tiny.js?v=2026_06_17_debug_v3"></script>
 
     <style>
         :root {
+            --bg: #0b0d19;
+            --surface: rgba(20, 24, 44, 0.95);
             --primary: #00f3ff;
-            --primary-glow: rgba(0, 243, 255, 0.4);
             --success: #00ff87;
-            --success-glow: rgba(0, 255, 135, 0.4);
-            --bg: #08090f;
-            --surface: rgba(13, 16, 27, 0.65);
-            --surface-border: rgba(255, 255, 255, 0.08);
-            --text: #f0f3f8;
-            --text-muted: #8a99ad;
+            --error: #ff3838;
         }
 
-        * {
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            margin: 0;
-            padding: 0;
+            background: var(--bg);
+            font-family: 'Outfit', sans-serif;
+            color: #fff;
             overflow: hidden;
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+            position: relative;
             height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
         }
 
-        /* Видео отображается аппаратно на заднем плане */
-        #video {
+        #video, #canvas {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-            display: block;
+            top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
         }
+        #video { opacity: 0; pointer-events: none; } /* Скрываем сырое видео, рисуем всё через canvas */
 
-        /* Полноэкранный контейнер */
-        #canvas-container {
+        #lab-panel {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1;
-        }
-
-        /* Холст накладывается поверх видео для отрисовки графики */
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 2;
-            pointer-events: none;
-            display: block;
-        }
-
-        /* Интерфейсная панель управления (сверху) */
-        #header-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
+            top: 15px; left: 15px; right: 15px;
             background: var(--surface);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--surface-border);
-            padding: 16px 24px;
-            border-radius: 16px;
-            z-index: 10;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .brand-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .brand-title {
-            font-weight: 800;
-            font-size: 1.2rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            background: linear-gradient(90deg, #00f3ff, #00ff87);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .brand-subtitle {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-family: 'Roboto Mono', monospace;
-            margin-top: 2px;
-        }
-
-        /* Панель статуса и отладки (снизу) */
-        #status-panel {
-            position: absolute;
-            top: 100px;
-            left: 20px;
-            right: 20px;
-            background: var(--surface);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--surface-border);
-            padding: 10px 16px;
-            border-radius: 14px;
-            z-index: 10;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .status-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: #ff3838;
-            box-shadow: 0 0 8px #ff3838;
-            transition: all 0.3s ease;
-        }
-
-        .status-dot.active {
-            background-color: var(--primary);
-            box-shadow: 0 0 10px var(--primary);
-            animation: pulse 1.5s infinite alternate;
-        }
-
-        .status-dot.detected {
-            background-color: var(--success);
-            box-shadow: 0 0 10px var(--success);
-            animation: pulse-success 0.8s infinite alternate;
-        }
-
-        .status-text {
-            font-weight: 600;
-            font-size: 1rem;
-            letter-spacing: 0.5px;
-        }
-
-        .debug-info {
-            font-family: 'Roboto Mono', monospace;
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255,255,255,0.05);
-            display: flex;
-            justify-content: space-between;
-        }
-
-        /* Кнопка запуска с неоновым свечением */
-        #start-btn {
-            position: absolute;
-            padding: 16px 36px;
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            color: var(--bg);
-            background: linear-gradient(135deg, var(--primary), var(--success));
-            border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            z-index: 20;
-            box-shadow: 0 4px 20px var(--primary-glow);
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            font-family: 'Outfit', sans-serif;
-            text-transform: uppercase;
-        }
-
-        #start-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 8px 30px var(--success-glow);
-        }
-
-        #start-btn:active {
-            transform: scale(0.98);
-        }
-
-        /* Направляющая рамка прицела в центре */
-        #reticle-overlay {
-            position: absolute;
-            width: 250px;
-            height: 250px;
-            border: 2px dashed rgba(0, 243, 255, 0.3);
-            border-radius: 24px;
-            z-index: 5;
-            pointer-events: none;
-            display: none;
-            transition: all 0.3s ease;
-        }
-
-        /*#reticle-overlay::before, #reticle-overlay::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border-color: var(--primary);
-            border-style: solid;
-        }*/
-
-        /* Анимации */
-        @keyframes pulse {
-            0% { opacity: 0.6; box-shadow: 0 0 4px var(--primary); }
-            100% { opacity: 1; box-shadow: 0 0 12px var(--primary); }
-        }
-
-        @keyframes pulse-success {
-            0% { opacity: 0.6; box-shadow: 0 0 4px var(--success); }
-            100% { opacity: 1; box-shadow: 0 0 14px var(--success); }
-        }
-
-        #debug-log-panel {
-            position: absolute;
-            bottom: 24px;
-            left: 20px;
-            right: 20px;
-            height: 90px;
-            background: rgba(13, 16, 27, 0.85);
-            border: 1px solid var(--primary-glow);
-            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
             padding: 10px;
+            z-index: 1000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .panel-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        
+        button, select {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:active { background: rgba(255,255,255,0.2); }
+        #btn-freeze { background: var(--primary); color: #000; }
+        #btn-freeze.active { background: var(--error); color: #fff; }
+        
+        /* Окно геометрического брака (ВНИЗУ) */
+        #geo-inspector {
+            position: absolute;
+            bottom: 15px; left: 15px; right: 15px;
+            height: 120px;
+            background: rgba(11, 13, 25, 0.9);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            padding: 8px;
             font-family: 'Roboto Mono', monospace;
             font-size: 11px;
-            color: #ffffff;
             overflow-y: auto;
-            z-index: 999;
-            pointer-events: none;
+            z-index: 1000;
         }
-        .log-entry { margin-bottom: 4px; line-height: 1.3; }
-        .log-success { color: var(--success); font-weight: bold; }
-        .log-warn { color: #ffb703; }
-        .log-error { color: #ff4d4d; }
-
+        .geo-item { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
     </style>
 </head>
 <body>
 
-    <!-- Шапка приложения -->
-    <div id="header-panel">
-        <div class="brand-info">
-            <span class="brand-title">Piet-AR Core</span>
-            <span class="brand-subtitle">Status: ARUCO_DICT_5X5_50</span>
-        </div>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+        
+    <div id="lab-panel">
+        <div class="panel-row">
+            <select id="select-view"></select>
+                <button id="btn-freeze">⏸ ЗАМОРОЗИТЬ КАДР</button>
+                <button id="btn-mock">🔮 ТЕСТ ЭТАЛОНА</button>
+            </select>    
+        </div>    
+        <div class="panel-row"></div>
+            <select id="select-view">
+                <option value="normal">Режим: Оригинал (Цветной)</option>
+                <option value="thresh">Режим: Бинаризация (Чёрно-белый)</option>
+                <option value="contours">Режим: Сетка найденных линий</option>
+            </select>
+        </div>    
+        <div id="status-text" style="font-size: 11px; color: #aaa; text-align: center;">Камера активна. Ищу маркер...</div>
     </div>
-
-    <!-- Кнопка запуска -->
-    <button id="start-btn" onclick="startCamera()">Активировать камеру</button>
-    
-    <!-- Направляющий прицел по центру -->
-    <div id="reticle-overlay"></div>
-
-    <!-- Контейнер для отображения потока -->
-    <div id="canvas-container">
-        <video id="video" autoplay playsinline></video>
-        <canvas id="canvas"></canvas>
-    </div>
-
-    <!-- Нижняя панель статуса -->
-    <div id="status-panel">
-        <div class="status-header">
-            <div id="status-indicator" class="status-dot"></div>
-            <div id="status-message" class="status-text">Ожидание инициализации...</div>
-        </div>
-        <div class="debug-info">
-            <span id="fps-counter">FPS: --</span>
-            <span id="res-counter">Разрешение: --</span>
-        </div>
-    </div>
-
-    <div id="debug-log-panel"> 
-        <div class="log-entry log-warn">🟡 Окно отладки инициализировано. Жду кадры...</div>
-    </div>       
+        
+    <div id="geo-inspector">
+        <div style="color: var(--primary); font-weight: bold; margin-bottom: 4px;">🔍 ИНСПЕКТОР ГЕОМЕТРИИ (АНАЛИЗ ЛИНИЙ):</div>
+        <div id="geo-log">Ожидание стоп-кадра для калибровки...</div>
+    </div>   
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const statusMessage = document.getElementById('status-message');
-        const statusIndicator = document.getElementById('status-indicator');
-        const fpsCounter = document.getElementById('fps-counter');
-        const resCounter = document.getElementById('res-counter');
-        const reticle = document.getElementById('reticle-overlay');
-        const startBtn = document.getElementById('start-btn');
 
-        // Фиксируем переменные, чтобы браузер не падал
-        let isTrackerReady = true;
-        let isProcessing = false;
-        let lastFrameTime = performance.now();
-        let frameCount = 0;
-        let detector;
+        const btnFreeze = document.getElementById('btn-freeze');
+        const btnMock = document.getElementById('btn-mock');
+        const selectView = document.getElementById('select-view');
+        const statusText = document.getElementById('status-text');
+        const geoLog = document.getElementById('geo-log');
+
+        let detector = new AR.Detector();
+        let isFrozen = false;
+        let frozenImageData = null;
         
-        // Виджеты для обновления плашки интерфейса
-        const fpsWidget = document.getElementById('fps-counter');
-        const detWidget = document.getElementById('status-message');
+        // Запуск камеры (сразу просим легкий поток 320x240, чтобы пиксели не плыли)
+        const constraints = {
+            video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
+        };
 
-        async function startCamera() {
-            // Проверка загрузки библиотеки jsaruco
-            if (typeof AR === 'undefined' || typeof AR.Detector === 'undefined') {
-                let errorDetails = (window.loadErrors && window.loadErrors.length > 0) 
-                    ? "<br><small style='font-size:0.75rem;color:#ffa0a0;font-family:monospace;display:block;margin-top:5px;line-height:1.2;'>" + window.loadErrors.join("<br>") + "</small>"
-                    : "<br><small style='font-size:0.75rem;color:#ffa0a0;display:block;margin-top:5px;'>Причина: Файл не загрузился или сбой инициализации</small>";
-                statusMessage.innerHTML = "❌ Ошибка: jsaruco не загрузилась!" + errorDetails;
-                statusMessage.style.color = "#ff3838";
-                return;
+        navigator.mediaDevices.getUserMedia(constraints)
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { alert("Ошибка камеры: " + err.message); });
+
+        // Обработка клика Заморозки
+        btnFreeze.addEventListener('click', () => {
+            isFrozen = !isFrozen;
+            if (isFrozen) {
+                btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
+                btnFreeze.classList.add('active');
+                statusText.innerText = "Кадр заморожен. Изучаем структуру пикселей...";
+            } else {
+                btnFreeze.innerText = "⏸ ЗАМОРОЗИТЬ КАДР";
+                btnFreeze.classList.remove('active');
+                statusText.innerText = "Камера активна. Ищу маркер...";
+                frozenImageData = null;
+                requestAnimationFrame(processLoop);
             }
+        });
+        
+        // Кнопка подсовывания идеального эталона ArUco из памяти
+        btnMock.addEventListener('click', () => {
+            isFrozen = true;
+            btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
+            btnFreeze.classList.add('active');
+            statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
-            // Инициализируем детектор
-            detector = new AR.Detector();
+            // Генерируем искусственную картинку идеального маркера (внутренний ID = 0)
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(40, 80, 160, 160); // Черная рамка
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(72, 112, 96, 96);   // Белое нутро
 
-            try {
-                const constraints = {
-                    video: {
-                        facingMode: "environment",
-                        width: { ideal: 320 },
-                        height: { ideal: 240 }
-                    }
-                };
-                
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                
-                // Скрываем кнопку
-                startBtn.style.display = 'none';
-                reticle.style.display = 'block';
-                
-                statusIndicator.className = 'status-dot active';
-                statusMessage.innerText = "Инициализация видеопотока...";
-                
-                // Запускаем цикл рендеринга
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    resCounter.innerText = `Разрешение: ${video.videoWidth}x${video.videoHeight}`;
-                    logToScreen(`Поток запущен: ${video.videoWidth}x${video.videoHeight}`, 'log-success');
-                };
+            // Внутренние биты маркера
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(72, 112, 32, 32);
+            ctx.fillRect(136, 112, 32, 32);
+            ctx.fillRect(104, 144, 32, 32);
 
-                requestAnimationFrame(processFrame);
-            } catch (err) {
-                // Выводим ошибку прямо в блок статуса огромным красным текстом!
-                statusMessage.innerHTML = `
-                    <div style="background: rgba(255,0,0,0.85); padding: 10px; border-radius: 8px; color: white;">
-                        ⚠️ КРИТИЧЕСКАЯ ОШИБКА: <br>
-                        <b style="font-family: monospace; font-size: 0.8rem; display:block; margin-top:5px;">${err.message}</b>
-                        <small style="display:block; color:#ffcccc; margin-top:2px;">${err.stack ? err.stack.split('\n')[0] : ''}</small>
-                    </div>
-                `;        
-                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error');
-                console.error(err);
-            }
-        }
+            frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            analyzeFrame(frozenImageData);
+        });
 
-        // 1. Помощник для вывода текста на экран телефона
-        function logToScreen(text, type = '') {
-            const panel = document.getElementById('debug-log-panel');
-            if (!panel) return;
-            const entry = document.createElement('div');
-            entry.className = 'log-entry ' + type;
-            entry.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
-            panel.appendChild(entry);
-
-            // Автоскролл вниз
-            panel.scrollTop = panel.scrollHeight;
-
-            // Ограничиваем количество строк, чтобы не перегружать телефон
-            while (panel.childNodes.length > 20) {
-                panel.removeChild(panel.firstChild);
-            }
-        }        
-
-        // 2. Главный цикл обработки кадров
-        let lastTrackerState = null; // Для отслеживания смены статуса
-
-        async function processFrame() {
-            if (!isTrackerReady) {
-                if (lastTrackerState !== false) {
-                    logToScreen("⏳ Ожидание готовности трекера...", "log-warn");
-                    lastTrackerState = false;
-                }    
-                requestAnimationFrame(processFrame);
-                return;
-            }
-
-            if (lastTrackerState === false) {
-                logToScreen("🚀 Трекер успешно готов! Начинаю обработку...", "log-success");
-                lastTrackerState = true;
-            }    
-
-            try {
-                // Проверяем, захватывается ли видео
-                if (!video.videoWidth || !video.videoHeight) {
-                    requestAnimationFrame(processFrame);
-                    return;
+        function processLoop() {
+            if (isFrozen) return;
+            
+            if (video.videoWidth && video.videoHeight) { 
+                if (canvas.width !== 240 || canvas.height !== 320) {
+                    canvas.width = 240;
+                    canvas.height = 320;
                 }
-
-                // ЖЕСТКО ЗАДАЕМ ЛЕГКОЕ ПОРТРЕТНОЕ РАЗРЕШЕНИЕ ДЛЯ ВСЕГО КОНВЕЙЕРА
-                const renderWidth = 240;
-                const renderHeight = 320;   
-
-                // Принудительно выставляем размеры холста
-                if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
-                    canvas.width = renderWidth;
-                    canvas.height = renderHeight;
-                    resCounter.innerText = `Матрица: ${renderWidth}x${renderHeight}`;
-                    logToScreen(`Геометрия выровнена под оптимизацию: ${renderWidth}x${renderHeight}`, 'log-success');
-                }
-
-                // ВКЛЮЧАЕМ АППАРАТНОЕ СГЛАЖИВАНИЕ ДЛЯ УНИЧТОЖЕНИЯ РЕБРИСТОСТИ
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-
-                // Рисуем кадр в оптимизированном размере
-                ctx.drawImage(video, 0, 0, renderWidth, renderHeight);
-
-                // НЕЙРОФИЛЬТР: Слегка размываем картинку на 0.5 пикселя, чтобы склеить зазубрины лазерной печати
-                ctx.filter = "blur(0.5px)";
-                ctx.drawImage(canvas, 0, 0);
-                ctx.filter = "none"; // Сбрасываем, чтобы не портить отрисовку неона
-
-                // Забираем легкие данные
-                const imageData = ctx.getImageData(0, 0, renderWidth, renderHeight);
-
-                // Считаем FPS
-                frameCount++;
-                const now = performance.now();
-                if (now - lastFrameTime >= 1000) {
-                    fpsWidget.innerText = `FPS: ${frameCount}`;
-                    frameCount = 0;
-                    lastFrameTime = now;
-                }    
                 
-                // Запуск детекции
-                const t0 = performance.now();
-                const markers = detector.detect(imageData) || [];
-                const dt = Math.round(performance.now() - t0);
+                // Обычный съём кадра без сглаживания, чтобы зафиксировать сырую ребристость принтера
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-                // Вытаскиваем аудит конвейера
-                const rawContours = detector.stage_total_contours || 0; // Шаг 1: Поиск линий
-                const candidates = detector.stage_candidates || 0;     // Шаг 2: Четырехугольники
-                const finalMarkers = markers.length;                    // Шаг 3: Валидация битов
+                analyzeFrame(currentImgData);
 
-                // Выводим сквозную аналитику в реальном времени
-                statusMessage.innerHTML = `
-                    <div style="line-height: 1.2; font-size: 0.8rem; background: rgba(0,0,0,0.7); padding: 6px; border-radius: 5px;"
-                        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 2px;">СБОРКА: V18</div>
-                        <div>🔍 Всего линий в кадре: <b>${rawContours}</b></div>
-                        <div>📐 Геометрия (4 угла): <b>${candidates}</b></div>
-                        <div>🆔 Распознано маркеров: <b style="color:${finalMarkers ? '#00ff87' : '#ff3838'}">${finalMarkers}</b></div>
-                        <div style="color: #aaa; margin-top: 1px;">Время обработки: ${dt}ms</div>
-                    </div>
-                `;
-
-                // Подсвечиваем всё, что вообще смогла зацепить камера на Шаге 2
-                if (detector.candidates && detector.candidates.length > 0) {
-                    ctx.strokeStyle = "rgba(255, 183, 3, 0.4)";
-                    ctx.lineWidth = 2;
-                    detector.candidates.forEach(poly => {
-                        if (poly && poly.length === 4 && poly[0]) {
-                            ctx.beginPath();
-                            ctx.moveTo(poly[0].x, poly[0].y);
-                            for (let i = 1; i < 4; i++) {
-                                if (poly[i]) ctx.lineTo(poly[i].x, poly[i].y);
-                            }
-                            ctx.closePath();
-                            ctx.stroke();
-                        }
-                    });
-                }    
-                
-                // Если маркер успешно распознан
-                if (markers && markers.length > 0) {
-                    drawGlowingOutline(markers);
-                }
-
-            } catch (err) {
-                statusMessage.innerHTML = `
-                    <div style="background: rgba(255,0,0,0.85); padding: 10px; border-radius: 8px; color: white; text-align:left;">
-                        ⚠️ СБОЙ КОНВЕЙЕРА: <br>
-                        <b style="font-family: monospace; font-size: 0.75rem; display:block; margin-top:5px; line-height:1.2;">${err.message}</b>
-                    </div>
-                `;
-                logToScreen(`Ошибка обработки: ${err.message}`, 'log-error'); 
-                console.error(err);
             }
-
-            requestAnimationFrame(processFrame);
+            requestAnimationFrame(processLoop);
         }
         
-        function drawGlowingOutline(markers) {
-            markers.forEach(marker => {
-                const corners = marker.corners;
-                
-                // 1. Рисуем полупрозрачную светящуюся заливку маркера
-                ctx.fillStyle = "rgba(0, 255, 135, 0.15)";
-                ctx.beginPath();
-                ctx.moveTo(corners[0].x, corners[0].y);
-                for (let i = 1; i < 4; i++) {
-                    ctx.lineTo(corners[i].x, corners[i].y);
-                }
-                ctx.closePath();
-                ctx.fill();
-
-                // 2. Рисуем неоновую обводку ребер
-                ctx.strokeStyle = "var(--success)";
-                ctx.lineWidth = 4;
-                ctx.shadowColor = "rgba(0, 255, 135, 0.8)";
-                ctx.shadowBlur = 15;
-                
-                ctx.beginPath();
-                ctx.moveTo(corners[0].x, corners[0].y);
-                for (let i = 1; i < 4; i++) {
-                    ctx.lineTo(corners[i].x, corners[i].y);
-                }
-                ctx.closePath();
-                ctx.stroke();
-                
-                // Сбрасываем тени, чтобы не тормозило дальше
-                ctx.shadowBlur = 0;
-
-                // 3. Рисуем круги-узлы по углам
-                ctx.fillStyle = "#ffffff";
-                corners.forEach(corner => {
-                    ctx.beginPath();
-                    ctx.arc(corner.x, corner.y, 6, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.strokeStyle = "var(--success)";
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+        function analyzeFrame(imageData) {
+            // Запускаем детектор
+            const markers = detector.detect(imageData) || [];
+            
+            // Выводим гео-лог углов
+            if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
+                let html = "";
+                // Берем топ-3 самых крупных контуров на экране
+                const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 3);
+                sorted.forEach((item, index) => {
+                    const isSquare = item.detectedCorners === 4;
+                    html += `<div class="geo-item">
+                        Фигура #${index+1}: Периметр=${item.perimeter}px | 
+                        Углов найдено: <b style="color:${isSquare ? 'var(--success)' : 'var(--error)'}">${item.detectedCorners}</b> 
+                        ${isSquare ? '(КВАДРАТ ✅)' : '(БРАК ❌)'}
+                    </div>`;
                 });
+                geoLog.innerHTML = html;
+            } else {
+                geoLog.innerHTML = "<div>Контуры не найдены. Камера видит сплошной фон.</div>";
+            }
 
-                // 4. Пишем ID над маркером с красивым фоном
-                const textX = corners[0].x;
-                const textY = corners[0].y - 15;
-                ctx.fillStyle = "rgba(13, 16, 27, 0.85)";
-                ctx.fillRect(textX - 5, textY - 20, 80, 26);
+            // РЕЖИМЫ ОТОБРАЖЕНИЯ (Переключаются на лету через селект)
+            const mode = selectView.value;
                 
-                ctx.fillStyle = "var(--success)";
-                ctx.font = "bold 14px 'Outfit', sans-serif";
-                ctx.fillText(`AR ID: ${marker.id}`, textX, textY - 2);
-            });    
-        }           
+            if (mode === "thresh") {
+                // Показываем черно-белый мир детектора (результат бинаризации)
+                ctx.putImageData(cvImageToBrowserImageData(detector.thres), 0, 0);
+            } else if (mode === "contours") {
+                // Показываем сетку вообще всех линий
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.strokeStyle = "#00f3ff";
+                ctx.lineWidth = 1;
+                if (detector.contours) {
+                    detector.contours.forEach(c => {
+                        ctx.beginPath();
+                        for(let i=0; i<c.length; i++) {
+                            ctx.lineTo(c[i].x, c[i].y);
+                        }    
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }
+            } else {
+                // Обычный цветной режим + отрисовка находок
+                if (isFrozen && frozenImageData) {
+                    ctx.putImageData(frozenImageData, 0, 0);
+                }
+            
+                // Подсвечиваем кандидатов, которые прошли фильтр углов (оранжевым)
+                if (detector.candidates) {
+                    ctx.strokeStyle = "orange";
+                    ctx.lineWidth = 2;
+                    detector.candidates.forEach(p => {
+                        ctx.beginPath();
+                        ctx.moveTo(p[0].x, p[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }
+
+                // Если маркер полностью распознался — фигачим жирный зеленый неон
+                if (markers.length > 0) {
+                    statusText.innerText = `🎉 МАРКЕР УСПЕШНО РАСПОЗНАН! ID: ${markers[0].id}`;
+                    ctx.strokeStyle = "var(--success)";
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = "var(--success)";
+                    ctx.shadowBlur = 15;
+                    markers.forEach(m => {
+                        ctx.beginPath();
+                        ctx.moveTo(m.corners[0].x, m.corners[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                    ctx.shadowBlur = 0;
+                }
+            }    
+        }        
+                    
+        // Вспомогательный конвертер внутренней памяти CV в понятный браузеру формат
+        function cvImageToBrowserImageData(cvImg) {
+            const imgData = ctx.createImageData(cvImg.width, cvImg.height);
+            let dst = imgData.data;
+            let src = cvImg.data;
+            let j = 0;
+            for (let i = 0; i < src.length; ++i) { 
+                dst[j++] = src[i];
+                dst[j++] = src[i];
+                dst[j++] = src[i];
+                dst[j++] = 255;
+            }        
+            return imgData;
+        }    
+        
+        video.addEventListener('play', () => { requestAnimationFrame(processLoop); }); 
     </script>
 </body>
 </html>
