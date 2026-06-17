@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_17_debug_v4"></script>
+    <script src="aruco_tiny.js?v=2026_06_17_debug_v5"></script>
 
     <style>
         
@@ -180,23 +180,34 @@
         // Кнопка подсовывания идеального эталона ArUco из памяти
         btnMock.addEventListener('click', () => {
             isFrozen = true;
-            btnFreeze.innerText = "▶ ЗАПУСТИТЬ";
-            btnFreeze.style.background = "#ff3838";
-            btnFreeze.style.color = "#fff";
-            statusText.innerText = "Тест эталона...";
+            btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
+            btnFreeze.classList.add('active');
+            statusText.innerText = "Тестирование эталонного цифрового маркера...";
+
+            // Делаем холст строго 240x320, чтобы координаты совпали\
+            canvas.width = 240;
+            canvas.height = 320;
 
             // Рисуем чистый цифровой маркер прямо на холсте
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "#000000";
-            ctx.fillRect(40, 40, 160, 160);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(72, 72, 96, 96);
+
+            // Смещаем и уменьшаем маркер, чтобы он со всеми отступами влез в 240x320
+            // Центрируем квадрат 160x160: по X (240-160)/2 = 40, по Y (320-160)/2 = 80
+            const offsetX = 40;
+            const offsetY = 80;
 
             ctx.fillStyle = "#000000";
-            ctx.fillRect(72, 72, 32, 32);
-            ctx.fillRect(136, 72, 32, 32);
-            ctx.fillRect(104, 104, 32, 32);
+            ctx.fillRect(offsetX, offsetY, 160, 160); // Черная внешняя рамка
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(offsetX + 32, offsetY + 32, 96, 96);   // Белое внутреннее поле (ширина рамки 2 ячейки)
+
+            // Внутренние черные биты маркера (размер ячейки 32x32)
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(offsetX + 32, offsetY + 32, 32, 32);  // Левый верхний бит
+            ctx.fillRect(offsetX + 96, offsetY + 32, 32, 32);  // Правый верхний бит
+            ctx.fillRect(offsetX + 64, offsetY + 64, 32, 32);  // Центральный бит
 
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             analyzeFrame(frozenImageData);
