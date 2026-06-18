@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>Piet-AR | Лаборатория отладки</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="aruco_tiny.js?v=2026_06_18_refresh_v5"></script>
+
+    <style>
+        
+        body {
+            background: #0b0d19;
+            color: #fff;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Простая и надежная разметка кнопок в ряд без наложений */
+        .controls-container {
+            background: #14182c;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px;
+            font-weight: bold;
+            background: #00f3ff;
+            color: #000;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            background: #20263c;
+            color: #fff;
+            border: 1px solid #00f3ff;
+            border-radius: 4px;
+            font-size: 14px;
+            display: block;
+        }
+        
+        /* Зона видеокадра */
+        .view-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            min-height: 200px;
+        }
+        
+        #video {
+            display: none; /* Прячем видео, работаем только с canvas */
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Картинка будет масштабироваться без искажений */
+        }
+        
+        /* Нижний лог */
+        #geo-inspector {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00f3ff;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .geo-item {
+            margin-bottom: 4px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 4px;
+        }    
+    </style>
+</head>
+<body>
+
+    <div class="controls-container">
+        <div class="button-row">
+            <button id="btn-freeze">⏸ ЗАМОРОЗИТЬ</button>
+            <button id="btn-mock" style="background: #00ff87;">🔮 ТЕСТ ЭТАЛОНА</button>
+        </div>  
+        <div>
+            <select id="select-view">
+                <option value="normal">Режим: Оригинал (Цветной)</option>
+                <option value="thresh">Режим: Бинаризация (Чёрно-белый)</option>  
+                <option value="contours">Режим: Сетка найденных линий</option>    
+            </select>
+        </div>
+        <div id="status-text" style="font-size: 11px; color: #aaa; text-align: center; margin-top: 8px;">Камера активна.</div>
+    </div>
+
+    <div class="view-container">
+        <video id="video" autoplay playsinline muted></video>    
+        <canvas id="canvas"></canvas>
+    </div>
+        
+    <div id="geo-inspector">
+        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 5px;">🔍 АНАЛИЗ ЛИНИЙ:</div>
+        <div id="geo-log">Ожидание потока...</div>  
+    </div>   
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const btnFreeze = document.getElementById('btn-freeze');
+        const btnMock = document.getElementById('btn-mock');
+        const selectView = document.getElementById('select-view');
+        const statusText = document.getElementById('status-text');
+        const geoLog = document.getElementById('geo-log');
+
+        let detector = new AR.Detector();
+        let isFrozen = false;
+        let frozenImageData = null;
+        
+        // Запрашиваем разрешение, подходящее для детектора
+        const constraints = {
+            video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
+            .then(stream => {
+                video.srcObject = stream; 
+                statusText.innerText = "Поток с камеры получен.";
+            })    
+            .catch(err => {
+                alert("Ошибка камеры: " + err.message); 
+                statusText.innerText = "Камера заблокирована.";
+            });    
+
+        // Обработка клика Заморозки
+        btnFreeze.addEventListener('click', () => {
+            isFrozen = !isFrozen;
+            if (isFrozen) {
+                btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
+                btnFreeze.style.background = "#ff3838";
+                btnFreeze.style.color = "#fff";
+                statusText.innerText = "Кадр заморожен.";
+            } else {
+                btnFreeze.innerText = "⏸ ЗАМОРОЗИТЬ";
+                btnFreeze.style.background = "#00f3ff";
+                btnFreeze.style.color = "#000";
+                statusText.innerText = "Камера активна.";
+                frozenImageData = null;
+                requestAnimationFrame(processLoop);
+            }
+        });
+        
+        // Кнопка подсовывания идеального эталона ArUco из памяти
+        btnMock.addEventListener('click', () => {
+            isFrozen = true;
+            btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
+            btnFreeze.style.background = "#ff3838";
+            btnFreeze.style.color = "#fff";
+            statusText.innerText = "Тестирование эталонного цифрового маркера...";
+
+            // Делаем холст строго 240x320, чтобы координаты совпали\
+            canvas.width = 240;
+            canvas.height = 320;
+
+            // 1. Белый фон
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Центрируем маркер
+            const offsetX = 40;
+            const offsetY = 80;
+
+            // 2. Внешняя черная рамка (размер 140x140, шаг сетки для 7 ячеек равен 20px)
+            const cell = 20;
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(offsetX, offsetY, cell * 7, cell * 7);
+
+            // 3. Белое внутреннее поле матрицы 5x5
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(offsetX + cell, offsetY + cell, cell * 5, cell * 5);
+
+            // 4. Отрисовка черных пикселей строго по твоей оригинальной распечатке:
+            ctx.fillStyle = "#000000";
+
+            // Строка 1 (индекс 0): Черные углы (ячейки 0 и 4)
+            ctx.fillRect(offsetX + cell * 1, offsetY + cell * 1, cell, cell);
+            ctx.fillRect(offsetX + cell * 5, offsetY + cell * 1, cell, cell);
+
+            // Строка 2 (индекс 1): Пустая (все белые)
+
+            // Строка 3 (индекс 2): Черный пиксель строго по центру (ячейка 2)
+            ctx.fillRect(offsetX + cell * 3, offsetY + cell * 3, cell, cell);
+
+            // Строка 4 (индекс 3): Пустая (все белые)
+
+            // Строка 5 (индекс 4): Черные углы (ячейки 0, 2 и 4)
+            ctx.fillRect(offsetX + cell * 1, offsetY + cell * 5, cell, cell);
+            ctx.fillRect(offsetX + cell * 3, offsetY + cell * 5, cell, cell);
+            ctx.fillRect(offsetX + cell * 5, offsetY + cell * 5, cell, cell);
+
+            frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            analyzeFrame(frozenImageData);
+        });
+
+        function processLoop() {
+            if (isFrozen) return;
+            
+            if (video.videoWidth && video.videoHeight) { 
+                if (canvas.width !== 240 || canvas.height !== 320) {
+                    canvas.width = 240;
+                    canvas.height = 320;
+                }
+                
+                // Рисуем кадр с камеры на холст
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                analyzeFrame(currentImgData);
+
+            }
+            requestAnimationFrame(processLoop);
+        }
+        
+        function analyzeFrame(imageData) {
+            // Запускаем детектор
+            const markers = detector.detect(imageData) || [];
+            
+            // Вывод лога
+            if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
+                let html = "";
+                const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 2);
+                sorted.forEach((item, index) => {
+                    const isSquare = item.detectedCorners === 4;
+                    html += `<div class="geo-item">
+                        #${index+1}: Перим=${item.perimeter}px |
+                        Углов: <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.detectedCorners}</b>
+                        ${isSquare ? '(ОК ✅)' : '(БРАК ❌)'}
+                    </div>`;
+                });
+                geoLog.innerHTML = html;
+            } else {
+                geoLog.innerHTML = "<div>Контуры не найдены. Сплошной фон.</div>";
+            }
+
+            const mode = selectView.value;
+                
+            if (mode === "thresh") {
+                // Показываем черно-белый мир детектора (результат бинаризации)
+                ctx.putImageData(cvImageToBrowserImageData(detector.thres), 0, 0);
+            } else if (mode === "contours") {
+                // Показываем сетку вообще всех линий
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.strokeStyle = "#00f3ff";
+                ctx.lineWidth = 1;
+                if (detector.contours) {
+                    detector.contours.forEach(c => {
+                        ctx.beginPath();
+                        for(let i=0; i<c.length; i++) {
+                            ctx.lineTo(c[i].x, c[i].y);
+                        }    
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }
+            } else {
+                // Обычный цветной режим + отрисовка находок
+                if (isFrozen && frozenImageData) {
+                    ctx.putImageData(frozenImageData, 0, 0);
+                }
+            
+                // Подсвечиваем кандидатов, которые прошли фильтр углов (оранжевым)
+                if (detector.candidates) {
+                    ctx.strokeStyle = "orange";
+                    ctx.lineWidth = 2;
+                    detector.candidates.forEach(p => {
+                        ctx.beginPath();
+                        ctx.moveTo(p[0].x, p[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }
+
+                // Если маркер полностью распознался — фигачим жирный зеленый неон
+                if (markers.length > 0) {
+                    statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
+                    ctx.strokeStyle = "#00ff87";
+                    ctx.lineWidth = 4;
+                    markers.forEach(m => {
+                        ctx.beginPath();
+                        ctx.moveTo(m.corners[0].x, m.corners[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }
+            }    
+        }        
+        
+        function cvImageToBrowserImageData(cvImg) {
+            const imgData = ctx.createImageData(cvImg.width, cvImg.height);
+            let dst = imgData.data;
+            let src = cvImg.data;
+            let j = 0;
+            for (let i = 0; i < src.length; ++i) { 
+                dst[j++] = src[i];
+                dst[j++] = src[i];
+                dst[j++] = src[i];
+                dst[j++] = 255;
+            }        
+            return imgData;
+        }    
+        
+        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
+    </script>
+</body>
+</html>
