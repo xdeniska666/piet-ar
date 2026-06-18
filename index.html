@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_18_v9"></script>
+    <script src="aruco_tiny.js?v=2026_06_18_v10"></script>
 
     <style>
         body {
@@ -213,11 +213,11 @@
             ctx.fillRect(offsetX + cell * 5, offsetY + cell * 1, cell, cell);
 
             const mockMatrix = [
-                [1, 1, 1, 0, 1], 
-                [0, 0, 0, 0, 1],
-                [0, 0, 0, 0, 0], 
-                [1, 0, 1, 1, 0], 
-                [0, 0, 1, 1, 1]
+                [1, 1, 1, 1, 0], 
+                [0, 0, 1, 1, 1],
+                [1, 1, 1, 1, 0], 
+                [0, 1, 0, 0, 0], 
+                [1, 1, 0, 0, 1]
             ];    
 
             ctx.fillStyle = "#000000";
