@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_18_v10"></script>
+    <script src="aruco_tiny.js?v=2026_06_18_v11"></script>
 
     <style>
         body {
@@ -207,11 +207,7 @@
 
             // 4. Отрисовка черных пикселей строго по твоей оригинальной распечатке:
             ctx.fillStyle = "#000000";
-
-            // Строка 1 (индекс 0): Черные углы (ячейки 0 и 4)
-            ctx.fillRect(offsetX + cell * 1, offsetY + cell * 1, cell, cell);
-            ctx.fillRect(offsetX + cell * 5, offsetY + cell * 1, cell, cell);
-
+        
             const mockMatrix = [
                 [1, 1, 1, 1, 0], 
                 [0, 0, 1, 1, 1],
