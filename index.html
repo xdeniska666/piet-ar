@@ -181,33 +181,49 @@
         btnMock.addEventListener('click', () => {
             isFrozen = true;
             btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
-            btnFreeze.classList.add('active');
+            btnFreeze.style.background = "#ff3838";
+            btnFreeze.style.color = "#fff";
             statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
             // Делаем холст строго 240x320, чтобы координаты совпали\
             canvas.width = 240;
             canvas.height = 320;
 
-            // Рисуем чистый цифровой маркер прямо на холсте
+            // 1. Белый фон
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Смещаем и уменьшаем маркер, чтобы он со всеми отступами влез в 240x320
-            // Центрируем квадрат 160x160: по X (240-160)/2 = 40, по Y (320-160)/2 = 80
+            // Центрируем маркер
             const offsetX = 40;
             const offsetY = 80;
 
+            // 2. Внешняя черная рамка (размер 140x140, шаг сетки для 7 ячеек равен 20px)
+            const cell = 20;
             ctx.fillStyle = "#000000";
-            ctx.fillRect(offsetX, offsetY, 160, 160); // Черная внешняя рамка
+            ctx.fillRect(offsetX, offsetY, cell * 7, cell * 7);
 
+            // 3. Белое внутреннее поле матрицы 5x5
             ctx.fillStyle = "#ffffff";
-            ctx.fillRect(offsetX + 32, offsetY + 32, 96, 96);   // Белое внутреннее поле (ширина рамки 2 ячейки)
+            ctx.fillRect(offsetX + cell, offsetY + cell, cell * 5, cell * 5);
 
-            // Внутренние черные биты маркера (размер ячейки 32x32)
+            // 4. Отрисовка черных пикселей строго по твоей оригинальной распечатке:
             ctx.fillStyle = "#000000";
-            ctx.fillRect(offsetX + 32, offsetY + 32, 32, 32);  // Левый верхний бит
-            ctx.fillRect(offsetX + 96, offsetY + 32, 32, 32);  // Правый верхний бит
-            ctx.fillRect(offsetX + 64, offsetY + 64, 32, 32);  // Центральный бит
+
+            // Строка 1 (индекс 0): Черные углы (ячейки 0 и 4)
+            ctx.fillRect(offsetX + cell * 1, offsetY + cell * 1, cell, cell);
+            ctx.fillRect(offsetX + cell * 5, offsetY + cell * 1, cell, cell);
+
+            // Строка 2 (индекс 1): Пустая (все белые)
+
+            // Строка 3 (индекс 2): Черный пиксель строго по центру (ячейка 2)
+            ctx.fillRect(offsetX + cell * 3, offsetY + cell * 3, cell, cell);
+
+            // Строка 4 (индекс 3): Пустая (все белые)
+
+            // Строка 5 (индекс 4): Черные углы (ячейки 0, 2 и 4)
+            ctx.fillRect(offsetX + cell * 1, offsetY + cell * 5, cell, cell);
+            ctx.fillRect(offsetX + cell * 3, offsetY + cell * 5, cell, cell);
+            ctx.fillRect(offsetX + cell * 5, offsetY + cell * 5, cell, cell);
 
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             analyzeFrame(frozenImageData);
