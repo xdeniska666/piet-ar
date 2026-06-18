@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_18_v11"></script>
+    <script src="aruco_tiny.js?v=2026_06_18_v12"></script>
 
     <style>
         body {
@@ -230,6 +230,7 @@
                 }
             } 
             
+            window.lastGeometryLog = []; // Очищаем старый лог перед тестом
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             analyzeFrame(frozenImageData);
         });
@@ -334,10 +335,11 @@
             let dst = imgData.data;
             let src = cvImg.data;
             let j = 0;
-            for (let i = 0; i < src.length; ++i) { 
-                dst[j++] = src[i];
-                dst[j++] = src[i];
-                dst[j++] = src[i];
+            for (let i = 0; i < src.length; ++i) {
+                let val = src[i];
+                dst[j++] = val; // R
+                dst[j++] = val; // G
+                dst[j++] = val; // B
                 dst[j++] = 255;
             }        
             return imgData;
