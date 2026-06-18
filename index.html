@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_18_v13"></script>
+    <script src="aruco_tiny.js?v=2026_06_18_v14"></script>
 
     <style>
         body {
@@ -231,8 +231,25 @@
                 }
             } 
             
-            window.lastGeometryLog = []; // Очищаем старый лог перед тестом
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            // ХАК ДЛЯ ДЕТЕКТОРА: вручную подсовываем идеальную бинарную маску в память aruco_tiny
+            // чтобы алгоритм поиска контуров не зависел от сломавшегося адаптивного порога
+            detector.thres.width = canvas.width;
+            detector.thres.height = canvas.height;
+            let src = frozenImageData.data;
+            let dst = detector.thres.data;
+
+            for (let i = 0, j = 0; i < src.length; i += 4, j++) {
+                // Если пиксель ближе к черному, пишем 0, если к белому - 255
+                let r = src[i], g = src[i+1], b = src[i+2];
+                let gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                dst[j] = gray < 128 ? 0 : 255;
+            }
+            
+            // Очищаем логи перед анализом
+            window.lastGeometryLog = [];
+            
             analyzeFrame(frozenImageData);
         });
 
@@ -344,7 +361,7 @@
                 dst[j++] = 255;
             }        
             return imgData;
-        }    
+        }
         
         video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
     </script>
