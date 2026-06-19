@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v17"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v18"></script>
 
     <style>
         body {
@@ -310,6 +310,9 @@
                 // Обычный цветной режим + отрисовка находок
                 if (isFrozen && frozenImageData) {
                     ctx.putImageData(frozenImageData, 0, 0);
+                } else {
+                    // Если камера активна - рисуем текущий живой кадр
+                    ctx.putImageData(imageData, 0, 0);    
                 }
             
                 // Подсвечиваем кандидатов, которые прошли фильтр углов (оранжевым)
