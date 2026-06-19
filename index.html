@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v18"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v19"></script>
 
     <style>
         body {
@@ -133,6 +133,10 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
+        // Создаем скрытый виртуальный холст для детектора, чтобы не портить живой кадр
+        const hiddenCanvas = document.createElement('canvas');
+        const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
+
         const btnFreeze = document.getElementById('btn-freeze');
         const btnMock = document.getElementById('btn-mock');
         const selectView = document.getElementById('select-view');
@@ -232,18 +236,8 @@
             } 
             
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            window.lastGeometryLog = [];
-            frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             // Вызываем отрисовку кадра
-            analyzeFrame(frozenImageData);
-
-            // Принудительно обновляем блок анализа линий, обходя пустой детектор контуров
-            const linesAnalysis = document.getElementById("linesAnalysis");
-            if (linesAnalysis) {
-                linesAnalysis.innerHTML = `<div>Периметр: <b>${mockPerimeter}px</b></div>` +
-                                          `<div>Найдено углов: <b style="color:#00ffcc">4 (ОК ✅)</b></div>`;
-            }                                
+            analyzeFrame(frozenImageData);                              
         });
 
         function processLoop() {
@@ -253,12 +247,15 @@
                 if (canvas.width !== 240 || canvas.height !== 320) {
                     canvas.width = 240;
                     canvas.height = 320;
+                    hiddenCanvas.width = 240;
+                    hiddenCanvas.height = 320;
                 }
                 
-                // Рисуем кадр с камеры на холст
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                // Рисуем ВСЕГДА чистый кадр на скрытый холст
+                hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                const rawImgData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
 
+                // Отдаем на анализ чистые цветные пиксели
                 analyzeFrame(currentImgData);
             }
             requestAnimationFrame(processLoop);
