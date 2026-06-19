@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v20"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v21"></script>
 
     <style>
         body {
@@ -133,6 +133,10 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
+        // Создаем скрытый холст в памяти только для захвата чистых кадров
+        const captureCanvas = document.createElement('canvas');
+        const captureCtx = captureCanvas.getContext('2d');
+
         const btnFreeze = document.getElementById('btn-freeze');
         const btnMock = document.getElementById('btn-mock');
         const selectView = document.getElementById('select-view');
@@ -243,11 +247,14 @@
                 if (canvas.width !== 240 || canvas.height !== 320) {
                     canvas.width = 240;
                     canvas.height = 320;
+                    // Синхронизируем размеры скрытого холста
+                    captureCanvas.width = 240;
+                    captureCanvas.height = 320;
                 }
                 
-                // Рисуем ВСЕГДА чистый кадр на скрытый холст
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                // Рисуем кадр на изолированный скрытый холст
+                captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+                const currentImgData = captureCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
 
                 // Отдаем на анализ чистые цветные пиксели
                 analyzeFrame(currentImgData);
@@ -300,7 +307,9 @@
             } else {
                 // Обычный цветной режим + отрисовка находок
                 if (isFrozen && frozenImageData) {
-                    ctx.putImageData(frozenImageData, 0, 0);   
+                    ctx.putImageData(frozenImageData, 0, 0);
+                } else {
+                    ctx.putImageData(imageData, 0, 0);       
                 }
             
                 // Подсвечиваем кандидатов, которые прошли фильтр углов (оранжевым)
