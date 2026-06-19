@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_18_v15"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v16"></script>
 
     <style>
         body {
@@ -282,8 +282,26 @@
             }
             requestAnimationFrame(processLoop);
         }
-        
+
         function analyzeFrame(imageData) {
+            // Переводим входящий кадр в жесткий черно-белый формат (заливка вместо линий)
+            let pixels = imageData.data;
+            for (let i = 0; i < pixels.length; i += 4) {
+                let r = pixels[i];
+                let g = pixels[i + 1];
+                let b = pixels[i + 2];
+                
+                // Считаем яркость пикселя
+                let gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                
+                // Если пиксель темный — делаем его чисто черным, если светлый — чисто белым
+                let binary = gray < 110 ? 0 : 255;
+                
+                pixels[i] = binary;     // R
+                pixels[i + 1] = binary; // G
+                pixels[i + 2] = binary; // B
+            }
+
             // Запускаем детектор
             const markers = detector.detect(imageData) || [];
             
@@ -358,7 +376,7 @@
                     });
                 }
             }    
-        }        
+        }
         
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
