@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v21"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v22"></script>
 
     <style>
         body {
@@ -133,10 +133,6 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
-        // Создаем скрытый холст в памяти только для захвата чистых кадров
-        const captureCanvas = document.createElement('canvas');
-        const captureCtx = captureCanvas.getContext('2d');
-
         const btnFreeze = document.getElementById('btn-freeze');
         const btnMock = document.getElementById('btn-mock');
         const selectView = document.getElementById('select-view');
@@ -247,14 +243,11 @@
                 if (canvas.width !== 240 || canvas.height !== 320) {
                     canvas.width = 240;
                     canvas.height = 320;
-                    // Синхронизируем размеры скрытого холста
-                    captureCanvas.width = 240;
-                    captureCanvas.height = 320;
                 }
                 
                 // Рисуем кадр на изолированный скрытый холст
-                captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-                const currentImgData = captureCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
                 // Отдаем на анализ чистые цветные пиксели
                 analyzeFrame(currentImgData);
@@ -286,12 +279,25 @@
             const mode = selectView.value;
                 
             if (mode === "thresh") {
-                // Показываем черно-белый мир детектора (результат бинаризации)
-                ctx.putImageData(cvImageToBrowserImageData(detector.thres), 0, 0);
+                // Вместо putImageData модифицируем пиксели прямо поверх холста, это не ломает поток камеры
+                if (detector.thres && detector.thres.data) {
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const dst = imgData.data;
+                    const src = detector.thres.data;
+                    let j = 0;
+                    for (let i = 0; i < src.length; ++i) {
+                        let val = src[i];
+                        dst[j] = val;   // R
+                        dst[j+1] = val; // G
+                        dst[j+2] = val; // B
+                        j += 4;
+                    }    
+                    ctx.putImageData(imgData, 0, 0);
+                }
             } else if (mode === "contours") {
-                // Показываем сетку вообще всех линий
+                // Если нужны контуры, заливаем холст черным и поверх бьем линии
                 ctx.fillStyle = "#000";
-                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.strokeStyle = "#00f3ff";
                 ctx.lineWidth = 1;
                 if (detector.contours) {
@@ -299,20 +305,17 @@
                         ctx.beginPath();
                         for(let i=0; i<c.length; i++) {
                             ctx.lineTo(c[i].x, c[i].y);
-                        }    
+                        }
                         ctx.closePath();
                         ctx.stroke();
                     });
                 }
             } else {
-                // Обычный цветной режим + отрисовка находок
+                // Если режим обычный цветной
                 if (isFrozen && frozenImageData) {
-                    ctx.putImageData(frozenImageData, 0, 0);
-                } else {
-                    ctx.putImageData(imageData, 0, 0);       
+                    ctx.putImageData(frozenImageData, 0, 0);   
                 }
-            
-                // Подсвечиваем кандидатов, которые прошли фильтр углов (оранжевым)
+                
                 if (detector.candidates) {
                     ctx.strokeStyle = "orange";
                     ctx.lineWidth = 2;
@@ -323,9 +326,8 @@
                         ctx.closePath();
                         ctx.stroke();
                     });
-                }
+                }      
 
-                // Если маркер полностью распознался — фигачим жирный зеленый неон
                 if (markers.length > 0) {
                     statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
                     ctx.strokeStyle = "#00ff87";
@@ -341,6 +343,8 @@
             }    
         }
         
+        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
+
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
             let dst = imgData.data;
