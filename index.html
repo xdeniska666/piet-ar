@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v16"></script>
+    <script src="aruco_tiny.js?v=2026_06_19_v17"></script>
 
     <style>
         body {
@@ -189,22 +189,22 @@
             canvas.height = 320;
 
             // 1. Белый фон
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = "#efefef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Шаг одной ячейки (маркер 7x7 ячеек займет 25 * 7 = 175px)
-            const cell = 25;
+            const cell = 22;
             
             // Центрируем маркер
             const offsetX = Math.floor((canvas.width - cell * 7) / 2); // 32px
             const offsetY = Math.floor((canvas.height - cell * 7) / 2); // 72px
 
             // 2. Рисуем внешнюю черную рамку (7x7 ячеек)
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#1a1a1a";
             ctx.fillRect(offsetX, offsetY, cell * 7, cell * 7);
 
             // 3. Вырезаем белое внутреннее поле матрицы 5x5
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = "#efefef";
             ctx.fillRect(offsetX + cell, offsetY + cell, cell * 5, cell * 5);
 
             // 4. Твоя точная матрица маркера
@@ -217,7 +217,7 @@
             ];    
 
             // 5. Отрисовываем черные пиксели строго по матрице
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#1a1a1a";
             for (let r = 0; r < 5; r++) {
                 for (let c = 0; c < 5; c++) {   
                     if (mockMatrix[r][c] === 1) {
@@ -233,27 +233,8 @@
             
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            // ХАК ДЛЯ ДЕТЕКТОРА: вручную подсовываем идеальную бинарную маску в память aruco_tiny
-            // чтобы алгоритм поиска контуров не зависел от сломавшегося адаптивного порога
-            detector.thres.width = canvas.width;
-            detector.thres.height = canvas.height;
-            let src = frozenImageData.data;
-            let dst = detector.thres.data;
-
-            for (let i = 0, j = 0; i < src.length; i += 4, j++) {
-                // Если пиксель ближе к черному, пишем 0, если к белому - 255
-                let r = src[i], g = src[i+1], b = src[i+2];
-                let gray = 0.2126 * src[i] + 0.7152 * src[i+1] + 0.0722 * src[i+2];
-                dst[j] = gray < 128 ? 0 : 255;
-            }
-            
-            // Передаем фиксированные параметры геометрии для тестового маркера
-            const mockPerimeter = (cell * 7) * 4; // 175 * 4 = 700
-            window.lastGeometryLog = [{
-                perimeter: mockPerimeter,
-                detectedCorners: 4
-            }];
-            
+            window.lastGeometryLog = [];
+            frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             // Вызываем отрисовку кадра
             analyzeFrame(frozenImageData);
 
@@ -284,25 +265,7 @@
         }
 
         function analyzeFrame(imageData) {
-            // Переводим входящий кадр в жесткий черно-белый формат (заливка вместо линий)
-            let pixels = imageData.data;
-            for (let i = 0; i < pixels.length; i += 4) {
-                let r = pixels[i];
-                let g = pixels[i + 1];
-                let b = pixels[i + 2];
-                
-                // Считаем яркость пикселя
-                let gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-                
-                // Если пиксель темный — делаем его чисто черным, если светлый — чисто белым
-                let binary = gray < 110 ? 0 : 255;
-                
-                pixels[i] = binary;     // R
-                pixels[i + 1] = binary; // G
-                pixels[i + 2] = binary; // B
-            }
-
-            // Запускаем детектор
+            // Запускаем детектор напрямую на исходных данных кадра
             const markers = detector.detect(imageData) || [];
             
             // Вывод лога
