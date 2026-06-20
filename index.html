@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_20_v23"></script>
+    <script src="aruco_tiny.js?v=2026_06_20_v25"></script>
 
     <style>
         body {
@@ -295,12 +295,20 @@
                     ctx.putImageData(imgData, 0, 0);
                 }
             } else if (mode === "contours") {
-                // Вместо fillRect рисуем полупрозрачную вуаль поверх живого видео кадра, чтобы затемнить фон
-                ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+                // Извлекаем текущие пиксели холста и вручную превращаем их в чисто черный экран
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const dst = imgData.data;
+                for (let j = 0; j < dst.length; j += 4) {
+                    dst[j] = 0;     // R
+                    dst[j+1] = 0;   // G
+                    dst[j+2] = 0;   // B
+                    dst[j+3] = 255;
+                }
+                ctx.putImageData(imgData, 0, 0);
+                
+                // Теперь поверх идеально черной подложки бьем неоновые линии
                 ctx.strokeStyle = "#00f3ff";
-                ctx.lineWidth = 1;
+                ctx.lineWidth = 1.5;
                 if (detector.contours) {
                     detector.contours.forEach(c => {
                         ctx.beginPath();
@@ -308,7 +316,7 @@
                             ctx.lineTo(c[i].x, c[i].y);
                         }
                         ctx.closePath();
-                        ctx.stroke();
+                        ctx.stroke();    
                     });
                 }
             } else {
