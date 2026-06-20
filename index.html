@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_20_v25"></script>
+    <script src="aruco_tiny.js?v=2026_06_20_v27"></script>
 
     <style>
         body {
@@ -295,28 +295,26 @@
                     ctx.putImageData(imgData, 0, 0);
                 }
             } else if (mode === "contours") {
-                // Извлекаем текущие пиксели холста и вручную превращаем их в чисто черный экран
-                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const dst = imgData.data;
-                for (let j = 0; j < dst.length; j += 4) {
-                    dst[j] = 0;     // R
-                    dst[j+1] = 0;   // G
-                    dst[j+2] = 0;   // B
-                    dst[j+3] = 255;
-                }
-                ctx.putImageData(imgData, 0, 0);
+                // Принудительно сбрасываем старые пути рисования, чтобы не вешать контекст
+                ctx.beginPath();
                 
-                // Теперь поверх идеально черной подложки бьем неоновые линии
+                // Заливаем холст чистым черным цветом стандартным методом
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Настраиваем неоновые линии
                 ctx.strokeStyle = "#00f3ff";
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = 2;
+                
                 if (detector.contours) {
                     detector.contours.forEach(c => {
                         ctx.beginPath();
-                        for(let i=0; i<c.length; i++) {
+                        ctx.moveTo(c[0].x, c[0].y);
+                        for(let i = 1; i < c.length; i++) {
                             ctx.lineTo(c[i].x, c[i].y);
                         }
                         ctx.closePath();
-                        ctx.stroke();    
+                        ctx.stroke();
                     });
                 }
             } else {
