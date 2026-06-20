@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_19_v22"></script>
+    <script src="aruco_tiny.js?v=2026_06_20_v23"></script>
 
     <style>
         body {
@@ -295,9 +295,10 @@
                     ctx.putImageData(imgData, 0, 0);
                 }
             } else if (mode === "contours") {
-                // Если нужны контуры, заливаем холст черным и поверх бьем линии
-                ctx.fillStyle = "#000";
+                // Вместо fillRect рисуем полупрозрачную вуаль поверх живого видео кадра, чтобы затемнить фон
+                ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
                 ctx.strokeStyle = "#00f3ff";
                 ctx.lineWidth = 1;
                 if (detector.contours) {
@@ -342,8 +343,6 @@
                 }
             }    
         }
-        
-        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
 
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
