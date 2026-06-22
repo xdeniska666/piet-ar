@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v35"></script>
+    <script src="aruco_tiny.js?v=2026_06_22_v36"></script>
 
     <style>
         body {
@@ -299,40 +299,40 @@
                     debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
 
                 } else if (mode === "contours") {
-                    // Исправленная чистая проверка наличия контуров
+                    // Проверяем, создал ли детектор массив контуров
                     if (!detector.contours || detector.contours.length === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре не обнаружено.</span>";
-
-                        // Даже если контуров нет, заливаем черным, чтобы не было зависшего кадра
-                        ctx.fillStyle = "#000000";
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        return;
+                        debugLog.innerHTML = "<span style='color:#ffaa00'>Кадры идут. Библиотека пока не зафиксировала контуров.</span>";
+                        return;    
                     }
-                    
+                
                     // Выводим количество найденных линий/контуров
                     debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
-                    
-                    ctx.beginPath();
-                    ctx.fillStyle = "#000000";
+                   
+                    // Поверх кадра накладываем полупрозрачную темную вуаль, чтобы неоновые линии горели ярче
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+                    // Настройка неонового стиля сетки контуров
                     ctx.strokeStyle = "#00f3ff";
                     ctx.lineWidth = 2;
                 
-                    detector.contours.forEach((c) => {
-                        if (c && c.length > 0) {
+                    // Рисуем абсолютно все линии, которые смогла найти библиотека
+                    for (let i = 0; i < detector.contours.length; i++) {
+                        const contour = detector.contours[i];
+                        if (contour && contour.length > 0) {
                             ctx.beginPath();
-                            ctx.moveTo(c[0].x, c[0].y);
-                            for(let i = 1; i < c.length; i++) {
-                                ctx.lineTo(c[i].x, c[i].y);
+                            ctx.moveTo(contour[0].x, contour[0].y);
+                            for (let k = 1; k < contour.length; k++) {
+                                ctx.lineTo(contour[k].x, contour[k].y);
                             }
                             ctx.closePath();
-                            ctx.stroke();    
+                            ctx.stroke();   
                         }
-                    });  
+                    }  
 
                 } else {
-                    if (detector.candidates) {
+                    // Режим Оригинал - подсвечиваем оранжевые кандидаты в маркеры
+                    if (detector.candidates && detector.candidates.length > 0) {
                         ctx.strokeStyle = "orange";
                         ctx.lineWidth = 2;
                         detector.candidates.forEach(p => {
