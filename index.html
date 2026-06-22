@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v28"></script>
+    <script src="aruco_tiny.js?v=2026_06_22_v32"></script>
 
     <style>
         body {
@@ -262,93 +262,98 @@
         }
 
         function analyzeFrame(imageData) {
-            // Запускаем детектор напрямую на исходных данных кадра
-            const markers = detector.detect(imageData) || [];
-            
-            // Вывод лога
-            if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
-                let html = "";
-                const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 2);
-                sorted.forEach((item, index) => {
-                    const isSquare = item.detectedCorners === 4;
-                    html += `<div class="geo-item">
-                        #${index+1}: Перим=${item.perimeter}px |
-                        Углов: <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.detectedCorners}</b>
-                        ${isSquare ? '(ОК ✅)' : '(БРАК ❌)'}
-                    </div>`;
-                });
-                geoLog.innerHTML = html;
-            } else {
-                geoLog.innerHTML = "<div>Контуры не найдены. Сплошной фон.</div>";
-            }
+            const debugLog = document.getElementById('geo-log');
 
-            const mode = selectView.value;
+            try {
+                const markers = detector.detect(imageData) || [];
+                const mode = selectView.value;
                 
-            if (mode === "thresh") {
-                // Вместо putImageData модифицируем пиксели прямо поверх холста, это не ломает поток камеры
-                if (detector.thres && detector.thres.data) {
-                    ctx.putImageData(cvImageToBrowserImageData(detector.thres), 0, 0);
-                }
-            } else if (mode === "contours") {
-                // Принудительно сбрасываем старые пути рисования, чтобы не вешать контекст
-                ctx.beginPath();
+                if (mode === "thresh") {
+                    if (!detector.thres || !detector.thres.data) {
+                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: detector.thres пустой!</span>";
+                        return;
+                    }    
                 
-                // Заливаем холст чистым черным цветом стандартным методом
-                ctx.fillStyle = "#000000";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Настраиваем неоновые линии
-                ctx.strokeStyle = "#00f3ff";
-                ctx.lineWidth = 2;
-                
-                if (detector.contours) {
-                    detector.contours.forEach(c => {
-                        ctx.beginPath();
-                        ctx.moveTo(c[0].x, c[0].y);
-                        for(let i = 1; i < c.length; i++) {
-                            ctx.lineTo(c[i].x, c[i].y);
-                        }
-                        ctx.closePath();
-                        ctx.stroke();
-                    });
-                }
-            } else {
-                // Если режим обычный цветной
-                if (isFrozen && frozenImageData) {
-                    ctx.putImageData(frozenImageData, 0, 0);0
-                } else {
-                    ctx.putImageData(imageData, 0, 0);      
-                }
-                
-                if (detector.candidates) {
-                    ctx.strokeStyle = "orange";
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const dst = imgData.data;
+                    const src = detector.thres.data;
+                    let j = 0;
+                    for (let i = 0; i < src.length; ++i) {
+                        let val = src[i];
+                        dst[j] = val;   
+                        dst[j+1] = val; 
+                        dst[j+2] = val; 
+                        j += 4;
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+                    debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
+
+                } else if (mode === "contours") {
+                    // Проверяем, генерируются ли вообще контуры детектором
+                    if (!detector.contours) {
+                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: массив detector.contours не существует!</span>";
+                        return;
+                    }
+                    
+                    // Выводим количество найденных контуров в реальном времени
+                    debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
+                    
+                    ctx.beginPath();
+                    ctx.fillStyle = "#000000";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    ctx.strokeStyle = "#00f3ff";
                     ctx.lineWidth = 2;
-                    detector.candidates.forEach(p => {
-                        ctx.beginPath();
-                        ctx.moveTo(p[0].x, p[0].y);
-                        for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
-                        ctx.closePath();
-                        ctx.stroke();
-                    });
-                }      
+                
+                    detector.contours.forEach((c) => {
+                        if (c && c.length > 0) {
+                            ctx.beginPath();
+                            ctx.moveTo(c[0].x, c[0].y);
+                            for(let i = 1; i < c.length; i++) {
+                                ctx.lineTo(c[i].x, c[i].y);
+                            }
+                            ctx.closePath();
+                            ctx.stroke();    
+                        }
+                    });  
 
-                if (markers.length > 0) {
-                    statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
-                    ctx.strokeStyle = "#00ff87";
-                    ctx.lineWidth = 4;
-                    markers.forEach(m => {
-                        ctx.beginPath();
-                        m.corners.forEach((corner, i) => {
-                            if (i === 0) ctx.moveTo(corner.x, corner.y);
-                            else ctx.lineTo(corner.x, corner.y);
+                } else {    
+                    if (isFrozen && frozenImageData) {
+                        ctx.putImageData(frozenImageData, 0, 0);   
+                    }
+                    
+                    if (detector.candidates) {
+                        ctx.strokeStyle = "orange";
+                        ctx.lineWidth = 2;
+                        detector.candidates.forEach(p => {
+                            ctx.beginPath();
+                            ctx.moveTo(p[0].x, p[0].y);
+                            for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
+                            ctx.closePath();
+                            ctx.stroke();   
                         });    
-                        ctx.closePath();
-                        ctx.stroke();
-                    });
+                    }
+                
+                    if (markers.length > 0) {
+                        statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
+                        ctx.strokeStyle = "#00ff87";
+                        ctx.lineWidth = 4;
+                        markers.forEach(m => {
+                            ctx.beginPath();
+                            ctx.moveTo(m.corners[0].x, m.corners[0].y);
+                            for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
+                            ctx.closePath();
+                            ctx.stroke();
+                        });    
+                    }
+                    debugLog.innerHTML = `<span style='color:#aaa'>Оригинал: кадры идут, найдено маркеров: ${markers.length}</span>`;
                 }
-            }    
-        }
-
+                
+            } catch (err) {
+                debugLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 КРИТИЧЕСКИЙ СБОЙ: ${err.message}</span>`;
+            }
+        }            
+        
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
             let dst = imgData.data;
