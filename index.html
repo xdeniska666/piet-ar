@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v32"></script>
+    <script src="aruco_tiny.js?v=2026_06_22_v33"></script>
 
     <style>
         body {
@@ -244,11 +244,10 @@
             if (isFrozen) return;
             
             if (video.videoWidth && video.videoHeight) { 
-                if (canvas.width !== 240 || canvas.height !== 320) {
-                    canvas.width = 240;
+                // Вместо жестких 240х320 подстраиваем холст под реальные пропорции видеопотока камеры
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                    canvas.width = video.videoWidth;
                     canvas.height = 320;
-                    captureCanvas.width = 240;
-                    captureCanvas.height = 320;
                 }
                 
                 // Рисуем кадр на изолированный скрытый холст
@@ -289,14 +288,18 @@
                     debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
 
                 } else if (mode === "contours") {
-                    // Проверяем, генерируются ли вообще контуры детектором
-                    if (!detector.contours) {
-                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: массив detector.contours не существует!</span>";
+                    // Исправленная чистая проверка наличия контуров
+                    if (!detector.contours || detector.contours.length === 0) {
+                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре не обнаружено.</span>";
+
+                        // Даже если контуров нет, заливаем черным, чтобы не было зависшего кадра
+                        ctx.fillStyle = "#000000";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
                         return;
                     }
                     
-                    // Выводим количество найденных контуров в реальном времени
-                    debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
+                    // Выводим количество найденных линий/контуров
+                    debugLog.innerHTML = `✓ Режим Сетки: Детектор нашел линий: <b>${detector.contours.length}</b>`;    
                     
                     ctx.beginPath();
                     ctx.fillStyle = "#000000";
