@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v34"></script>
+    <script src="aruco_tiny.js?v=2026_06_22_v35"></script>
 
     <style>
         body {
@@ -158,6 +158,13 @@
                 statusText.innerText = "Камера заблокирована.";
             });    
 
+        // Принудительный пересчет при смене режима в выпадающем списке (работает и на паузе)
+        selectView.addEventListener('change', () => {
+            if (isFrozen && frozenImageData) {
+                analyzeFrame(frozenImageData);
+            }
+        });            
+
         // Обработка клика Заморозки
         btnFreeze.addEventListener('click', () => {
             isFrozen = !isFrozen;
@@ -166,6 +173,11 @@
                 btnFreeze.style.background = "#ff3838";
                 btnFreeze.style.color = "#fff";
                 statusText.innerText = "Кадр заморожен.";
+
+                // Сохраняем текущий кадр с камеры перед остановкой трекера
+                if (video.videoWidth && video.videoHeight) {
+                    frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                }    
             } else {
                 btnFreeze.innerText = "⏸ ЗАМОРОЗИТЬ";
                 btnFreeze.style.background = "#00f3ff";
@@ -263,6 +275,9 @@
                 const markers = detector.detect(imageData) || [];
                 const mode = selectView.value;
                 
+                // Возвращаем исходную картинку на холст перед наложением слоев фильтров
+                ctx.putImageData(imageData, 0, 0);
+
                 if (mode === "thresh") {
                     if (!detector.thres || !detector.thres.data) {
                         debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: detector.thres пустой!</span>";
@@ -316,11 +331,7 @@
                         }
                     });  
 
-                } else {    
-                    if (isFrozen && frozenImageData) {
-                        ctx.putImageData(frozenImageData, 0, 0);   
-                    }
-                    
+                } else {
                     if (detector.candidates) {
                         ctx.strokeStyle = "orange";
                         ctx.lineWidth = 2;
