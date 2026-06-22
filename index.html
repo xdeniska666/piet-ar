@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v33"></script>
+    <script src="aruco_tiny.js?v=2026_06_22_v34"></script>
 
     <style>
         body {
@@ -133,10 +133,6 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
-        // Создаем невидимый холст в памяти только для захвата чистых кадров
-        const captureCanvas = document.createElement('canvas');
-        const captureCtx = captureCanvas.getContext('2d');
-
         const btnFreeze = document.getElementById('btn-freeze');
         const btnMock = document.getElementById('btn-mock');
         const selectView = document.getElementById('select-view');
@@ -247,7 +243,7 @@
                 // Вместо жестких 240х320 подстраиваем холст под реальные пропорции видеопотока камеры
                 if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
                     canvas.width = video.videoWidth;
-                    canvas.height = 320;
+                    canvas.height = video.videoHeight;
                 }
                 
                 // Рисуем кадр на изолированный скрытый холст
@@ -299,7 +295,7 @@
                     }
                     
                     // Выводим количество найденных линий/контуров
-                    debugLog.innerHTML = `✓ Режим Сетки: Детектор нашел линий: <b>${detector.contours.length}</b>`;    
+                    debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
                     
                     ctx.beginPath();
                     ctx.fillStyle = "#000000";
