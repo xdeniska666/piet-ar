@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_23_v37"></script>
+    <script src="aruco_tiny.js?v=2026_06_23_v38"></script>
 
     <style>
         body {
@@ -298,18 +298,26 @@
                     debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
 
                 } else if (mode === "contours") {
-                    if (!detector.contours || detector.contours.length === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре не обнаружено.</span>";
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        return;    
+                    // 1. Проверяем, существует ли вообще массив в библиотеке
+                    if (!detector.contours) {
+                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: библиотека не создала массив контуров!</span>";
+                        return;
                     }
                 
-                    // Выводим количество найденных линий/контуров
+                    // 2. Проверяем, пустой ли он на текущем кадре
+                    if (detector.contours.length === 0) {
+                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре пока не обнаружено.</span>";
+                        // Рисуем полупрозрачную вуаль поверх кадра, чтобы видеть, что режим работает
+                        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        return;
+                    }
+                    
+                    // 3. Если контуры есть — выводим их количество и рисуем сетку
                     debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
                    
                     // Поверх кадра накладываем полупрозрачную темную вуаль, чтобы неоновые линии горели ярче
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                     // Настройка неонового стиля сетки контуров
