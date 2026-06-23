@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_22_v36"></script>
+    <script src="aruco_tiny.js?v=2026_06_23_v37"></script>
 
     <style>
         body {
@@ -197,15 +197,14 @@
             statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
             // Делаем холст строго 240x320, чтобы координаты совпали\
-            canvas.width = 240;
-            canvas.height = 320;
+            canvas.width = 640;
+            canvas.height = 480;
 
             // 1. Белый фон
             ctx.fillStyle = "#efefef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Шаг одной ячейки (маркер 7x7 ячеек займет 25 * 7 = 175px)
-            const cell = 22;
+            const cell = 40;
             
             // Центрируем маркер
             const offsetX = Math.floor((canvas.width - cell * 7) / 2); // 32px
@@ -299,9 +298,10 @@
                     debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
 
                 } else if (mode === "contours") {
-                    // Проверяем, создал ли детектор массив контуров
                     if (!detector.contours || detector.contours.length === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>Кадры идут. Библиотека пока не зафиксировала контуров.</span>";
+                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре не обнаружено.</span>";
+                        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
                         return;    
                     }
                 
@@ -309,30 +309,28 @@
                     debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
                    
                     // Поверх кадра накладываем полупрозрачную темную вуаль, чтобы неоновые линии горели ярче
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                     // Настройка неонового стиля сетки контуров
                     ctx.strokeStyle = "#00f3ff";
                     ctx.lineWidth = 2;
                 
-                    // Рисуем абсолютно все линии, которые смогла найти библиотека
-                    for (let i = 0; i < detector.contours.length; i++) {
-                        const contour = detector.contours[i];
-                        if (contour && contour.length > 0) {
+                    detector.contours.forEach((c) => {
+                        if (c && c.length > 0) {
                             ctx.beginPath();
-                            ctx.moveTo(contour[0].x, contour[0].y);
-                            for (let k = 1; k < contour.length; k++) {
-                                ctx.lineTo(contour[k].x, contour[k].y);
+                            ctx.moveTo(c[0].x, c[0].y);
+                            for(let i = 1; i < c.length; i++) {
+                                ctx.lineTo(c[i].x, c[i].y);
                             }
                             ctx.closePath();
                             ctx.stroke();   
                         }
-                    }  
+                    });  
 
                 } else {
                     // Режим Оригинал - подсвечиваем оранжевые кандидаты в маркеры
-                    if (detector.candidates && detector.candidates.length > 0) {
+                    if (detector.candidates) {
                         ctx.strokeStyle = "orange";
                         ctx.lineWidth = 2;
                         detector.candidates.forEach(p => {
