@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v43"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v44"></script>
 
     <style>
         body {
@@ -250,9 +250,9 @@
             
             if (video.videoWidth && video.videoHeight) { 
                 // Вместо жестких 240х320 подстраиваем холст под реальные пропорции видеопотока камеры
-                if (canvas.width !== 240 || canvas.height !== 320) {
-                    canvas.width = 240;
-                    canvas.height = 320;
+                if (canvas.width !== 320 || canvas.height !== 240) {
+                    canvas.width = 320;
+                    canvas.height = 240;
                 }
                 
                 // Рисуем кадр на изолированный скрытый холст
@@ -265,27 +265,13 @@
             requestAnimationFrame(processLoop);
         }
 
-        function cvImageToBrowserImageData(cvImg) {
-            const imgData = ctx.createImageData(cvImg.width, cvImg.height);
-            let dst = imgData.data;
-            let src = cvImg.data;
-            let j = 0;
-            for (let i = 0; i < src.length; ++i) {
-                let val = src[i];
-                dst[j++] = val; // R
-                dst[j++] = val; // G
-                dst[j++] = val; // B
-                dst[j++] = 255;
-            }        
-            return imgData;
-        }
-
         function analyzeFrame(imageData) {
-            // Обязательно скармливаем кадр детектору при каждом вызове анализа
-            const markers = detector.detect(imageData) || [];
-            const mode = selectView.value;
+            try {
+                // Запускаем детектор
+                const markers = detector.detect(imageData) || [];
+                const mode = selectView.value;
             
-            // Вывод лога геометрии
+                // Вывод лога геометрии
             if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
                 let html = "";
                 const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 2);
@@ -303,8 +289,8 @@
             }
             
             if (mode === "thresh") {
-                // Твоя рабочая и проверенная бинаризация
-                if (detector.thres && detector.thres.data) {
+                // ЗАЩИТА: Проверяем, что бинаризованная матрица существует и не пустая
+                if (detector.thres && detector.thres.data && detector.thres.width > 0) {
                     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     const dst = imgData.data;
                     const src = detector.thres.data;
@@ -330,10 +316,10 @@
                 const rawContours = detector.contours || [];
                 
                 if (rawContours.length > 0) {
-                    lines.forEach(p => {
+                    rawContours.forEach(p => {
                         if (p && p.length >= 2) {
                             ctx.beginPath();
-                            // Защита структуры: проверяем типы координат (объект или массив точек)
+                            // Проверяем, в каком формате лежат точки (массив или объекты с x,y)
                             const startX = p[0].x !== undefined ? p[0].x : p[0][0];
                             const startY = p[0].y !== undefined ? p[0].y : p[0][1];
                             ctx.moveTo(startX, startY);
@@ -347,9 +333,9 @@
                             ctx.stroke();  
                         }
                     });
-                    statusText.innerText = `Отрисовано контуров библиотеки: ${rawContours.length}`;
+                    statusText.innerText = `Отрисовано контуров: ${rawContours.length}`;
                 } else {
-                    statusText.innerText = "Сетка пуста. Фильтр библиотеки отсекает линии.";
+                    statusText.innerText = "Сетка пуста. Измените положение маркера.";
                 }
                 
             } else {       
@@ -383,11 +369,36 @@
                     });    
                 } else {
                     statusText.innerText = isFrozen ? "Кадр заморожен." : "Камера активна.";
-                }
+                }  
             }    
+        } catch (err) {
+            // Ловим любые падения, чтобы не вешать приложение черным экраном
+                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА АНАЛИЗА: ${err.message}</span>`;
+        }
+    }        
+        // Перерисовка замороженного кадра при смене режима в селекте
+        selectView.addEventListener('change', () => {
+            if (isFrozen && frozenImageData) {
+                analyzeFrame(frozenImageData);
+            }
+        });        
+
+        function cvImageToBrowserImageData(cvImg) {
+            if (!cvImg || !cvImg.width || cvImg.width === 0) return null;
+            const imgData = ctx.createImageData(cvImg.width, cvImg.height);
+            let dst = imgData.data;
+            let src = cvImg.data;
+            let j = 0;
+            for (let i = 0; i < src.length; ++i) {
+                let val = src[i];
+                dst[j++] = val; // R
+                dst[j++] = val; // G
+                dst[j++] = val; // B
+                dst[j++] = 255;
+            }        
+            return imgData;
         }
 
-        // Единственный и чистый вызов слушателя в самом конце
         video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
     </script>
 </body>
