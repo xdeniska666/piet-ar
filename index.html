@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v41"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v42"></script>
 
     <style>
         body {
@@ -327,9 +327,9 @@
                 ctx.lineWidth = 1.5;
                 
                 // Используем кандидатов (полигоны), которые находит сам детектор ArUco
-                const lines = detector.candidates || [];
+                const rawContours = detector.contours || [];
                 
-                if (lines.length > 0) {
+                if (rawContours.length > 0) {
                     lines.forEach(p => {
                         if (p && p.length >= 4) {
                             ctx.beginPath();
@@ -341,9 +341,9 @@
                             ctx.stroke();  
                         }
                     });
-                    statusText.innerText = `Линий на холсте: ${lines.length * 4}`;
+                    statusText.innerText = `Найдено замкнутых линий: ${rawContours.length}`;
                 } else {
-                    statusText.innerText = "Сетка пуста. Линии не определены.";
+                    statusText.innerText = "Сетка пуста. Библиотека не выделила контуры.";
                 }
                 
             } else {       
