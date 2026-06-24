@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_23_v38"></script>
+    <script src="aruco_tiny.js?v=2026_06_23_v39"></script>
 
     <style>
         body {
@@ -197,14 +197,14 @@
             statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
             // Делаем холст строго 240x320, чтобы координаты совпали\
-            canvas.width = 640;
-            canvas.height = 480;
+            canvas.width = 320;
+            canvas.height = 240;
 
             // 1. Белый фон
             ctx.fillStyle = "#efefef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const cell = 40;
+            const cell = 20;
             
             // Центрируем маркер
             const offsetX = Math.floor((canvas.width - cell * 7) / 2); // 32px
@@ -267,6 +267,56 @@
             requestAnimationFrame(processLoop);
         }
 
+        //Функция обхода пикселей
+        function extractContoursFromBinary(cvImg) {
+            const contours = [];
+            const width = cvImg.width;
+            const height = cvImg.height;
+            const data = cvImg.data;
+            const visited = new Uint8Array(width * height);
+
+            const dirs = [
+                [-1, 0], [1, 0], [0, -1], [0, 1]
+            ];
+            
+            // Шаг сканирования 2 для высокой скорости на мобилках
+            for (let y = 1; y < height - 1; y += 2) {
+                for (let x = 1; x < width - 1; x += 2) {
+                    const idx = y * width + x;
+
+                    // В ArUco белый цвет после бинаризации равен 255
+                    if (data[idx] === 255 && !visited[idx]) {
+                        const contour = [];
+                        const stack = [{x, y}];
+                        visited[idx] = 1;
+
+                        while (stack.length > 0) {
+                            const p = stack.pop();
+                            contour.push({x: p.x, y: p.y});
+
+                            for (const d of dirs) {
+                                const nx = p.x + d[0];
+                                const ny = p.y + d[1];
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nIdx = ny * width + nx;
+                                    if (data[nIdx] === 255 && !visited[nIdx]) {
+                                        visited[nIdx] = 1;
+                                        stack.push({x: nx, y: ny});
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Отсекаем мелкий шум
+                        if (contour.length > 15) {
+                            contours.push(contour);
+                        }
+                    }
+                }
+            }
+            return contours;
+        }
+
         function analyzeFrame(imageData) {
             const debugLog = document.getElementById('geo-log');
 
@@ -283,7 +333,7 @@
                         return;
                     }    
                 
-                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const imgData = ctx.createImageData(detector.thres.width, detector.thres.height);
                     const dst = imgData.data;
                     const src = detector.thres.data;
                     let j = 0;
@@ -291,22 +341,30 @@
                         let val = src[i];
                         dst[j] = val;   
                         dst[j+1] = val; 
-                        dst[j+2] = val; 
+                        dst[j+2] = val;
+                        dst[j+3] = 255; 
                         j += 4;
                     }
+                    
+                    // Временно подгоняем холст под размер маски, чтобы корректно отобразить
+                    сanvas.width = detector.thres.width;
+                    canvas.height = detector.thres.height;
                     ctx.putImageData(imgData, 0, 0);
-                    debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: пиксели записаны</span>";
+                    debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: маска ArUco выведена</span>";
 
                 } else if (mode === "contours") {
                     // 1. Проверяем, существует ли вообще массив в библиотеке
                     if (!detector.contours) {
-                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: библиотека не создала массив контуров!</span>";
+                        debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: Нет бинарной маски для анализа!</span>";
                         return;
                     }
                 
+                    // Извлекаем контуры по исправленным размерам матрицы детектора
+                    const contours = extractContoursFromBinary(detector.thres);
+                    
                     // 2. Проверяем, пустой ли он на текущем кадре
                     if (detector.contours.length === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Контуров на кадре пока не обнаружено.</span>";
+                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Линий на кадре не обнаружено.</span>";
                         // Рисуем полупрозрачную вуаль поверх кадра, чтобы видеть, что режим работает
                         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -314,17 +372,21 @@
                     }
                     
                     // 3. Если контуры есть — выводим их количество и рисуем сетку
-                    debugLog.innerHTML = `✓ Режим Сетки: Детектор выдал контуров: <b>${detector.contours.length}</b>`;
+                    debugLog.innerHTML = `✓ Режим Сетки: Найдено независимых линий: <b>${contours.length}</b>`;
+
+                    // Подстраиваем отрисовку под пропорции маски детектора
+                    canvas.width = detector.thres.width;
+                    canvas.height = detector.thres.height;
                    
                     // Поверх кадра накладываем полупрозрачную темную вуаль, чтобы неоновые линии горели ярче
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                     // Настройка неонового стиля сетки контуров
                     ctx.strokeStyle = "#00f3ff";
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 1.5;
                 
-                    detector.contours.forEach((c) => {
+                    contours.forEach((c) => {
                         if (c && c.length > 0) {
                             ctx.beginPath();
                             ctx.moveTo(c[0].x, c[0].y);
@@ -370,6 +432,8 @@
             }
         }            
         
+        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
+
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
             let dst = imgData.data;
