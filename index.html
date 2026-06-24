@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v46"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v47"></script>
 
     <style>
         body {
@@ -204,8 +204,8 @@
             statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
             // Делаем холст строго 240x320, чтобы координаты совпали\
-            canvas.width = 240;
-            canvas.height = 320;
+            canvas.width = 320;
+            canvas.height = 240;
 
             // 1. Белый фон
             ctx.fillStyle = "#efefef";
@@ -255,10 +255,9 @@
             if (isFrozen) return;
             
             if (video.videoWidth && video.videoHeight) { 
-                // Вместо жестких 240х320 подстраиваем холст под реальные пропорции видеопотока камеры
-                if (canvas.width !== 240 || canvas.height !== 320) {
-                    canvas.width = 240;
-                    canvas.height = 320;
+                if (canvas.width !== 320 || canvas.height !== 240) {
+                    canvas.width = 320;
+                    canvas.height = 240;
                 }
                 
                 // РОВНАЯ ОТРИСОВКА: без сдвигов по осям, картинка ложится идеально ровно по центру
@@ -281,25 +280,23 @@
                 const markers = detector.detect(imageData) || [];
                 const mode = selectView.value;
 
-                // Вытаскиваем внутренние логи библиотеки и печатаем их в инспектор на экране
+                // Сбор и вывод запрашиваемых логов на экран смартфона
                 const countContours = (detector.contours || []).length;
-                const countCandidates = (detector.candidates || []).length;
-
-                let logHtml = `<div style="color:#00f3ff; font-weight:bold;">Логи библиотеки:</div>`;
-                logHtml += `<div>Сырых контуров (Contours): <b>${countContours}</b></div>`;
-                logHtml += `<div>Кандидатов (Candidates): <b>${countCandidates}</b></div>`;
+                let html = `<div>Contours: <b>${countContours}</b></div>`;
             
                 // Выводим логи аппроксимации на экран
-                if (approxLogs.length > 0) {
-                    logHtml += `<div style="color:#00ff87; margin-top:5px; font-weight:bold;">Аппроксимац0ия (approxPolyDP):</div>`;
-                    // Показываем первые три крупных контура
-                    approxLogs.slice(0, 3).forEach((log, idx) => {
-                        const isFourCorners = log.approxLength === 4;
-                        logHtml += `<div style="font-size:11px;">#${idx+1}: Точек контура=${log.contourLength} -> Углов:
-                            <b style="color:${isFourCorners ? '#00ff87' : '#ff3838'}">${log.approxLength}</b>
+                if (frameApproxLogs.length > 0) {
+                    // Выводим информацию по первым трем обработанным контурам
+                    frameApproxLogs.slice(0, 3).forEach((item, index) => {
+                        html += `<div class="geo-item" style="font-size: 11px; margin-top: 2px;">
+                            #${index+1}: Contour: <b>${item.contourLength}</b> | Corners: <b>${item.approxLength}</b>
                         </div>`;
                     });
-                }    
+                } else if (countContours > 0) {
+                    html += `<div style="color: #ff9900;">Контуры отсекаются внутренним фильтром длины.</div>`;
+                } else {
+                    html += `<div>Линии не найдены. Сплошной фон.</div>`;
+                }            
                 geoLog.innerHTML = logHtml;
             
                 if (mode === "thresh") {
@@ -331,25 +328,19 @@
                 
                     if (rawContours.length > 0) {
                         rawContours.forEach(p => {
-                            if (p && p.length >= 2) {
+                            if (c && c.length >= 2) {
                                 ctx.beginPath();
-                                // Проверяем, в каком формате лежат точки (массив или объекты с x,y)
-                                const startX = p[0].x !== undefined ? p[0].x : p[0][0];
-                                const startY = p[0].y !== undefined ? p[0].y : p[0][1];
-                                ctx.moveTo(startX, startY);
-
-                                for(let i = 1; i < p.length; i++) {
-                                    const nextX = p[i].x !== undefined ? p[i].x : p[i][0];
-                                    const nextY = p[i].y !== undefined ? p[i].y : p[i][1];
-                                    ctx.lineTo(nextX, nextY);
+                                ctx.moveTo(c[0].x, c[0].y);
+                                for(let i = 1; i < c.length; i++) {
+                                    ctx.lineTo(c[i].x, c[i].y);
                                 }
                                 ctx.closePath();
                                 ctx.stroke();  
                             }
                         });
-                        statusText.innerText = `Отрисовано линий: ${rawContours.length}`;
+                        statusText.innerText = `Отрисовано контуров: ${rawContours.length}`;
                     } else {
-                        statusText.innerText = "Сетка контуров пуста.";
+                        statusText.innerText = "Сетка пуста.";
                     }
                 
                 } else {       
@@ -399,7 +390,6 @@
         });        
 
         function cvImageToBrowserImageData(cvImg) {
-            if (!cvImg || !cvImg.width) return null;
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
             let dst = imgData.data;
             let src = cvImg.data;
