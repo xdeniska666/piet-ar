@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v42"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v43"></script>
 
     <style>
         body {
@@ -331,19 +331,25 @@
                 
                 if (rawContours.length > 0) {
                     lines.forEach(p => {
-                        if (p && p.length >= 4) {
+                        if (p && p.length >= 2) {
                             ctx.beginPath();
-                            ctx.moveTo(p[0].x, p[0].y);
+                            // Защита структуры: проверяем типы координат (объект или массив точек)
+                            const startX = p[0].x !== undefined ? p[0].x : p[0][0];
+                            const startY = p[0].y !== undefined ? p[0].y : p[0][1];
+                            ctx.moveTo(startX, startY);
+
                             for(let i = 1; i < p.length; i++) {
-                                ctx.lineTo(p[i].x, p[i].y);
+                                const nextX = p[i].x !== undefined ? p[i].x : p[i][0];
+                                const nextY = p[i].y !== undefined ? p[i].y : p[i][1];
+                                ctx.lineTo(nextX, nextY);
                             }
                             ctx.closePath();
                             ctx.stroke();  
                         }
                     });
-                    statusText.innerText = `Найдено замкнутых линий: ${rawContours.length}`;
+                    statusText.innerText = `Отрисовано контуров библиотеки: ${rawContours.length}`;
                 } else {
-                    statusText.innerText = "Сетка пуста. Библиотека не выделила контуры.";
+                    statusText.innerText = "Сетка пуста. Фильтр библиотеки отсекает линии.";
                 }
                 
             } else {       
