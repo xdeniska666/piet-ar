@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v45"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v46"></script>
 
     <style>
         body {
@@ -143,6 +143,23 @@
         let detector = new AR.Detector();
         let isFrozen = false;
         let frozenImageData = null;
+
+        // Хранилище для логов аппроксимации
+        let approxLogs = [];
+
+        // ПЕРЕХВАТ ФУНКЦИИ БИБЛИОТЕКИ ДЛЯ ИНСПЕКЦИИ ЛИНИЙ
+        if (typeof CV !== 'undefined' && CV.approxPolyDP) {
+            const originalApproxPolyDP = CV.approxPolyDP;
+            CV.approxPolyDP = function(contour, epsilon) {
+                const approx = originalApproxPolyDP(contour, epsilon);
+                // Записываем инфу о длине контура и количестве углов после обработки
+                approxLogs.push({
+                    contourLength: contour.length,
+                    approxLength: approx.length
+                });
+                return approx;
+            };
+        }          
         
         // Запрашиваем разрешение, подходящее для детектора
         const constraints = {
@@ -244,8 +261,8 @@
                     canvas.height = 320;
                 }
                 
-                // Рисуем кадр на изолированный скрытый холст
-                ctx.drawImage(video, 40, 0, 240, 240, 0, 40, 240, 240);
+                // РОВНАЯ ОТРИСОВКА: без сдвигов по осям, картинка ложится идеально ровно по центру
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 analyzeFrame(currentImgData);
 
@@ -257,7 +274,10 @@
 
         function analyzeFrame(imageData) {
             try {
-                // Запускаем детектор
+                // Очищаем логи перед новым проходом детектора
+                approxLogs = [];
+
+                // Вызываем базовый детектор библиотеки
                 const markers = detector.detect(imageData) || [];
                 const mode = selectView.value;
 
@@ -265,20 +285,18 @@
                 const countContours = (detector.contours || []).length;
                 const countCandidates = (detector.candidates || []).length;
 
-                let logHtml = `<div style="color:#00f3ff; font-weight:bold;">Статистика библиотеки:</div>`;
-                logHtml += `<div>Сырых контуров найдено: <b>${countContours}</b></div>`;
-                logHtml += `<div>Четырехугольников (candidates): <b>${countCandidates}</b></div>`;
+                let logHtml = `<div style="color:#00f3ff; font-weight:bold;">Логи библиотеки:</div>`;
+                logHtml += `<div>Сырых контуров (Contours): <b>${countContours}</b></div>`;
+                logHtml += `<div>Кандидатов (Candidates): <b>${countCandidates}</b></div>`;
             
-                // Вывод лога геометрии
-                if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
-                    logHtml += `<div style="color:#00ff87; margin-top:5px; font-weight:bold;">Аппроксимация (Топ-2):</div>`;
-                    const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 2);
-                    sorted.forEach((item, index) => {
-                        const isSquare = item.detectedCorners === 4;
-                        logHtml += `<div class="geo-item">
-                            #${index+1}: Перим=${item.perimeter}px | Углов:
-                            <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.detectedCorners}</b>
-                            ${isSquare ? '(ОК ✅)' : '(БРАК ❌)'}
+                // Выводим логи аппроксимации на экран
+                if (approxLogs.length > 0) {
+                    logHtml += `<div style="color:#00ff87; margin-top:5px; font-weight:bold;">Аппроксимац0ия (approxPolyDP):</div>`;
+                    // Показываем первые три крупных контура
+                    approxLogs.slice(0, 3).forEach((log, idx) => {
+                        const isFourCorners = log.approxLength === 4;
+                        logHtml += `<div style="font-size:11px;">#${idx+1}: Точек контура=${log.contourLength} -> Углов:
+                            <b style="color:${isFourCorners ? '#00ff87' : '#ff3838'}">${log.approxLength}</b>
                         </div>`;
                     });
                 }    
