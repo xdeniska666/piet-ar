@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v47"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v46"></script>
 
     <style>
         body {
@@ -22,7 +22,6 @@
             box-sizing: border-box;
         }
 
-        /* Простая и надежная разметка кнопок в ряд без наложений */
         .controls-container {
             background: #14182c;
             padding: 10px;
@@ -45,7 +44,6 @@
             border: none;
             border-radius: 4px;
             font-size: 12px;
-            cursor: pointer;
         }
         
         select {
@@ -59,7 +57,6 @@
             display: block;
         }
         
-        /* Зона видеокадра */
         .view-container {
             flex: 1;
             position: relative;
@@ -70,7 +67,7 @@
         }
         
         #video {
-            display: none; /* Прячем видео, работаем только с canvas */
+            display: none; 
         }
 
         #canvas {
@@ -79,10 +76,9 @@
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain; /* Картинка будет масштабироваться без искажений */
+            object-fit: contain; 
         }
         
-        /* Нижний лог */
         #geo-inspector {
             background: rgba(0, 0, 0, 0.8);
             border: 1px solid #00f3ff;
@@ -91,15 +87,15 @@
             margin-top: 10px;
             font-family: monospace;
             font-size: 12px;
-            max-height: 100px;
+            max-height: 140px;
             overflow-y: auto;
         }
         
-        /*.geo-item {
+        .geo-item {
             margin-bottom: 4px;
             border-bottom: 1px solid #222;
             padding-bottom: 4px;
-        }*/    
+        }    
     </style>
 </head>
 <body>
@@ -125,8 +121,8 @@
     </div>
         
     <div id="geo-inspector">
-        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 5px;">🔍 АНАЛИЗ ЛИНИЙ:</div>
-        <div id="geo-log">Ожидание потока...</div>  
+        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 5px;">🔍 ИНСПЕКТОР БИБЛИОТЕКИ:</div>
+        <div id="geo-log">Ожидание первого кадра...</div>  
     </div>   
 
     <script>
@@ -144,24 +140,26 @@
         let isFrozen = false;
         let frozenImageData = null;
 
-        // Хранилище для логов аппроксимации
-        let approxLogs = [];
+        // Массив для перехвата данных аппроксимации на каждом кадре
+        let currentFrameApprox = [];
 
-        // ПЕРЕХВАТ ФУНКЦИИ БИБЛИОТЕКИ ДЛЯ ИНСПЕКЦИИ ЛИНИЙ
+        // ПЕРЕХВАТ ФУНКЦИИ АППРОКСИМАЦИИ ДЛЯ ИНСПЕКТОРА
         if (typeof CV !== 'undefined' && CV.approxPolyDP) {
             const originalApproxPolyDP = CV.approxPolyDP;
             CV.approxPolyDP = function(contour, epsilon) {
                 const approx = originalApproxPolyDP(contour, epsilon);
-                // Записываем инфу о длине контура и количестве углов после обработки
-                approxLogs.push({
-                    contourLength: contour.length,
-                    approxLength: approx.length
-                });
+                frameApproxLogs(contour.length, approx.length);
                 return approx;
             };
-        }          
+        }
+
+        function frameApproxLogs(contourLen, approxLen) {
+            currentFrameApprox.push({
+                contour: contourLen,
+                corners: approxLen
+            });
+        }
         
-        // Запрашиваем разрешение, подходящее для детектора
         const constraints = {
             video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
         };
@@ -174,9 +172,8 @@
             .catch(err => {
                 alert("Ошибка камеры: " + err.message); 
                 statusText.innerText = "Камера заблокирована.";
-            });          
+            });    
 
-        // Обработка клика Заморозки
         btnFreeze.addEventListener('click', () => {
             isFrozen = !isFrozen;
             if (isFrozen) {
@@ -184,7 +181,7 @@
                 btnFreeze.style.background = "#ff3838";
                 btnFreeze.style.color = "#fff";
                 statusText.innerText = "Кадр заморожен.";
-                frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);    
+                frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             } else {
                 btnFreeze.innerText = "⏸ ЗАМОРОЗИТЬ";
                 btnFreeze.style.background = "#00f3ff";
@@ -195,7 +192,6 @@
             }
         });
         
-        // Кнопка подсовывания идеального эталона ArUco из памяти
         btnMock.addEventListener('click', () => {
             isFrozen = true;
             btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
@@ -203,19 +199,15 @@
             btnFreeze.style.color = "#fff";
             statusText.innerText = "Тестирование эталонного цифрового маркера...";
 
-            // Делаем холст строго 240x320, чтобы координаты совпали\
-            canvas.width = 320;
-            canvas.height = 240;
+            canvas.width = 240;
+            canvas.height = 320;
 
-            // 1. Белый фон
             ctx.fillStyle = "#efefef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const cell = 22;
-            
-            // Центрируем маркер
-            const offsetX = Math.floor((canvas.width - cell * 7) / 2); // 32px
-            const offsetY = Math.floor((canvas.height - cell * 7) / 2); // 72px
+            const offsetX = Math.floor((canvas.width - cell * 7) / 2); 
+            const offsetY = Math.floor((canvas.height - cell * 7) / 2); 
 
             ctx.fillStyle = "#1a1a1a";
             ctx.fillRect(offsetX, offsetY, cell * 7, cell * 7);
@@ -223,7 +215,6 @@
             ctx.fillStyle = "#efefef";
             ctx.fillRect(offsetX + cell, offsetY + cell, cell * 5, cell * 5);
 
-            // 4. Твоя точная матрица маркера
             const mockMatrix = [
                 [1, 1, 1, 1, 0], 
                 [0, 0, 1, 1, 1],
@@ -247,7 +238,6 @@
             } 
             
             frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            // Вызываем отрисовку кадра
             analyzeFrame(frozenImageData);                              
         });
 
@@ -255,17 +245,15 @@
             if (isFrozen) return;
             
             if (video.videoWidth && video.videoHeight) { 
-                if (canvas.width !== 320 || canvas.height !== 240) {
-                    canvas.width = 320;
-                    canvas.height = 240;
+                // Твои оригинальные, проверенные рабочие пропорции холста
+                if (canvas.width !== 240 || canvas.height !== 320) {
+                    canvas.width = 240;
+                    canvas.height = 320;
                 }
                 
-                // РОВНАЯ ОТРИСОВКА: без сдвигов по осям, картинка ложится идеально ровно по центру
+                // Твоя исходная чистая отрисовка кадра
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                analyzeFrame(currentImgData);
-
-                // Отдаем на анализ чистые цветные пиксели
                 analyzeFrame(currentImgData);
             }
             requestAnimationFrame(processLoop);
@@ -273,34 +261,34 @@
 
         function analyzeFrame(imageData) {
             try {
-                // Очищаем логи перед новым проходом детектора
-                approxLogs = [];
+                // Очищаем массив перехвата перед вызовом детектора
+                currentFrameApprox = [];
 
-                // Вызываем базовый детектор библиотеки
                 const markers = detector.detect(imageData) || [];
                 const mode = selectView.value;
 
-                // Сбор и вывод запрашиваемых логов на экран смартфона
+                // Вывод запрашиваемых логов на экран смартфона
                 const countContours = (detector.contours || []).length;
                 let html = `<div>Contours: <b>${countContours}</b></div>`;
-            
-                // Выводим логи аппроксимации на экран
-                if (frameApproxLogs.length > 0) {
-                    // Выводим информацию по первым трем обработанным контурам
-                    frameApproxLogs.slice(0, 3).forEach((item, index) => {
+
+                if (currentFrameApprox.length > 0) {
+                    // Сортируем контуры по убыванию длины и берем топ-3 для вывода
+                    const sortedApprox = currentFrameApprox.sort((a, b) => b.contour - a.contour).slice(0, 3);
+                    sortedApprox.forEach((item, index) => {
+                        const isSquare = item.corners === 4;
                         html += `<div class="geo-item" style="font-size: 11px; margin-top: 2px;">
-                            #${index+1}: Contour: <b>${item.contourLength}</b> | Corners: <b>${item.approxLength}</b>
+                            #${index+1}: Contour: <b>${item.contour}</b> | Corners: <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.corners}</b>
                         </div>`;
                     });
                 } else if (countContours > 0) {
-                    html += `<div style="color: #ff9900;">Контуры отсекаются внутренним фильтром длины.</div>`;
+                    html += `<div style="color: #ff9900;">Линии отсекаются встроенным фильтром библиотеки.</div>`;
                 } else {
                     html += `<div>Линии не найдены. Сплошной фон.</div>`;
-                }            
-                geoLog.innerHTML = logHtml;
-            
+                }
+                geoLog.innerHTML = html;
+                    
                 if (mode === "thresh") {
-                    // Рабочая и проверенная бинаризация
+                    // Твоя оригинальная циклическая бинаризация пикселей
                     if (detector.thres && detector.thres.data) {
                         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                         const dst = imgData.data;
@@ -312,22 +300,18 @@
                             dst[j+1] = val; 
                             dst[j+2] = val; 
                             j += 4;
-                        }
+                        }    
                         ctx.putImageData(imgData, 0, 0);
-                    }    
+                    }
                 } else if (mode === "contours") {
-                    // Режим Сетки найденных линий
-                    ctx.fillStyle = "#000000";
+                    ctx.fillStyle = "#000";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
                     ctx.strokeStyle = "#00f3ff";
-                    ctx.lineWidth = 1.5;
-                
-                    // Используем кандидатов (полигоны), которые находит сам детектор ArUco
+                    ctx.lineWidth = 1;
+                    
                     const rawContours = detector.contours || [];
-                
                     if (rawContours.length > 0) {
-                        rawContours.forEach(p => {
+                        rawContours.forEach(c => {
                             if (c && c.length >= 2) {
                                 ctx.beginPath();
                                 ctx.moveTo(c[0].x, c[0].y);
@@ -335,20 +319,18 @@
                                     ctx.lineTo(c[i].x, c[i].y);
                                 }
                                 ctx.closePath();
-                                ctx.stroke();  
+                                ctx.stroke();
                             }
                         });
                         statusText.innerText = `Отрисовано контуров: ${rawContours.length}`;
                     } else {
                         statusText.innerText = "Сетка пуста.";
                     }
-                
-                } else {       
-                    // Режим: Оригинал (Цветной)
+                } else {
                     if (isFrozen && frozenImageData) {
-                        ctx.putImageData(frozenImageData, 0, 0);
+                        ctx.putImageData(frozenImageData, 0, 0);   
                     }
-                
+                    
                     if (detector.candidates) {
                         ctx.strokeStyle = "orange";
                         ctx.lineWidth = 2;
@@ -357,10 +339,10 @@
                             ctx.moveTo(p[0].x, p[0].y);
                             for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
                             ctx.closePath();
-                            ctx.stroke();   
-                        });    
-                    }
-                
+                            ctx.stroke();
+                        });
+                    }      
+
                     if (markers.length > 0) {
                         statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
                         ctx.strokeStyle = "#00ff87";
@@ -371,23 +353,24 @@
                             for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
                             ctx.closePath();
                             ctx.stroke();
-                        });    
+                        });
                     } else {
                         statusText.innerText = isFrozen ? "Кадр заморожен." : "Камера активна.";
-                    }  
+                    }
                 }    
             } catch (err) {
-                // Ловим любые падения, чтобы не вешать приложение черным экраном
-                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА АНАЛИЗА: ${err.message}</span>`;
+                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 СБОЙ АНАЛИЗА: ${err.message}</span>`;
             }
         }
-
-        // Перерисовка замороженного кадра при смене режима в селекте
+        
+        // Обновление замороженного кадра при смене режима фильтра
         selectView.addEventListener('change', () => {
             if (isFrozen && frozenImageData) {
                 analyzeFrame(frozenImageData);
             }
-        });        
+        });
+
+        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
 
         function cvImageToBrowserImageData(cvImg) {
             const imgData = ctx.createImageData(cvImg.width, cvImg.height);
@@ -396,15 +379,13 @@
             let j = 0;
             for (let i = 0; i < src.length; ++i) {
                 let val = src[i];
-                dst[j++] = val; // R
-                dst[j++] = val; // G
-                dst[j++] = val; // B
+                dst[j++] = val; 
+                dst[j++] = val; 
+                dst[j++] = val; 
                 dst[j++] = 255;
             }        
             return imgData;
         }
-
-        video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
     </script>
 </body>
 </html>
