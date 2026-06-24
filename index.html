@@ -354,7 +354,7 @@
 
                 } else if (mode === "contours") {
                     // 1. Проверяем, существует ли вообще массив в библиотеке
-                    if (!detector.contours) {
+                    if (!detector.thres || !detector.thres.data) {
                         debugLog.innerHTML = "<span style='color:#ff3838'>⚠ Ошибка: Нет бинарной маски для анализа!</span>";
                         return;
                     }
@@ -363,7 +363,7 @@
                     const contours = extractContoursFromBinary(detector.thres);
                     
                     // 2. Проверяем, пустой ли он на текущем кадре
-                    if (detector.contours.length === 0) {
+                    if (contours.length === 0) {
                         debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Линий на кадре не обнаружено.</span>";
                         // Рисуем полупрозрачную вуаль поверх кадра, чтобы видеть, что режим работает
                         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
