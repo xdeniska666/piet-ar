@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v40"></script>
+    <script src="aruco_tiny.js?v=2026_06_24_v41"></script>
 
     <style>
         body {
@@ -205,16 +205,16 @@
             ctx.fillStyle = "#efefef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const cell = 20;
+            const cell = 22;
             
             // Центрируем маркер
             const offsetX = Math.floor((canvas.width - cell * 7) / 2); // 32px
             const offsetY = Math.floor((canvas.height - cell * 7) / 2); // 72px
 
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#1a1a1a";
             ctx.fillRect(offsetX, offsetY, cell * 7, cell * 7);
 
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = "#efefef";
             ctx.fillRect(offsetX + cell, offsetY + cell, cell * 5, cell * 5);
 
             // 4. Твоя точная матрица маркера
@@ -226,7 +226,7 @@
                 [1, 1, 0, 0, 1]
             ];    
 
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#1a1a1a";
             for (let r = 0; r < 5; r++) {
                 for (let c = 0; c < 5; c++) {   
                     if (mockMatrix[r][c] === 1) {
@@ -250,9 +250,9 @@
             
             if (video.videoWidth && video.videoHeight) { 
                 // Вместо жестких 240х320 подстраиваем холст под реальные пропорции видеопотока камеры
-                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                if (canvas.width !== 240 || canvas.height !== 320) {
+                    canvas.width = 240;
+                    canvas.height = 320;
                 }
                 
                 // Рисуем кадр на изолированный скрытый холст
@@ -263,171 +263,6 @@
                 analyzeFrame(currentImgData);
             }
             requestAnimationFrame(processLoop);
-        }
-
-        //Функция обхода пикселей
-        function extractContoursFromBinary(cvImg) {
-            const contours = [];
-            const width = cvImg.width;
-            const height = cvImg.height;
-            const data = cvImg.data;
-            const visited = new Uint8Array(width * height);
-
-            const dirs = [
-                [-1, 0], [1, 0], [0, -1], [0, 1]
-            ];
-            
-            // Шаг сканирования 2 для высокой скорости на мобилках
-            for (let y = 1; y < height - 1; y += 2) {
-                for (let x = 1; x < width - 1; x += 2) {
-                    const idx = y * width + x;
-
-                    // В ArUco белый цвет после бинаризации равен 255
-                    if (data[idx] === 255 && !visited[idx]) {
-                        const contour = [];
-                        const stack = [{x, y}];
-                        visited[idx] = 1;
-
-                        while (stack.length > 0) {
-                            const p = stack.pop();
-                            contour.push({x: p.x, y: p.y});
-
-                            for (const d of dirs) {
-                                const nx = p.x + d[0];
-                                const ny = p.y + d[1];
-                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                    const nIdx = ny * width + nx;
-                                    if (data[nIdx] === 255 && !visited[nIdx]) {
-                                        visited[nIdx] = 1;
-                                        stack.push({x: nx, y: ny});
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Отсекаем мелкий шум
-                        if (contour.length > 15) {
-                            contours.push(contour);
-                        }
-                    }
-                }
-            }
-            return contours;
-        }
-
-        function analyzeFrame(imageData) {
-            const debugLog = document.getElementById('geo-log');
-
-            try {
-                const markers = detector.detect(imageData) || [];
-                const mode = selectView.value;
-                
-                // Возвращаем исходную картинку на холст перед наложением слоев фильтров
-                ctx.putImageData(imageData, 0, 0);
-
-                if (mode === "thresh") {
-                    if (!detector.thres || !detector.thres.data || detector.thres.width === 0 || detector.thres.height === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>⏳ Ожидание первого кадра для бинаризации...</span>";
-                        return;
-                    }    
-                
-                    const imgData = ctx.createImageData(detector.thres.width, detector.thres.height);
-                    const dst = imgData.data;
-                    const src = detector.thres.data;
-                    let j = 0;
-                    for (let i = 0; i < src.length; ++i) {
-                        let val = src[i];
-                        dst[j] = val;   
-                        dst[j+1] = val; 
-                        dst[j+2] = val;
-                        dst[j+3] = 255; 
-                        j += 4;
-                    }
-                    
-                    // Временно подгоняем холст под размер маски, чтобы корректно отобразить
-                    canvas.width = detector.thres.width;
-                    canvas.height = detector.thres.height;
-                    ctx.putImageData(imgData, 0, 0);
-                    debugLog.innerHTML = "<span style='color:#00ff87'>✓ Режим Бинаризации: маска ArUco выведена</span>";
-
-                } else if (mode === "contours") {
-                    // 1. Проверяем, существует ли вообще массив в библиотеке
-                    if (!detector.thres || !detector.thres.data || detector.thres.width === 0 || detector.thres.height === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>⏳ Ожидание первого кадра для сетки...</span>";
-                        return;
-                    }
-                
-                    // Извлекаем контуры по исправленным размерам матрицы детектора
-                    const contours = extractContoursFromBinary(detector.thres);
-                    
-                    // 2. Проверяем, пустой ли он на текущем кадре
-                    if (contours.length === 0) {
-                        debugLog.innerHTML = "<span style='color:#ffaa00'>Камера в норме. Линий на кадре не обнаружено.</span>";
-                        // Рисуем полупрозрачную вуаль поверх кадра, чтобы видеть, что режим работает
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        return;
-                    }
-                    
-                    // 3. Если контуры есть — выводим их количество и рисуем сетку
-                    debugLog.innerHTML = `✓ Режим Сетки: Найдено независимых линий: <b>${contours.length}</b>`;
-
-                    // Подстраиваем отрисовку под пропорции маски детектора
-                    canvas.width = detector.thres.width;
-                    canvas.height = detector.thres.height;
-                   
-                    // Поверх кадра накладываем полупрозрачную темную вуаль, чтобы неоновые линии горели ярче
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                    // Настройка неонового стиля сетки контуров
-                    ctx.strokeStyle = "#00f3ff";
-                    ctx.lineWidth = 1.5;
-                
-                    contours.forEach((c) => {
-                        if (c && c.length > 0) {
-                            ctx.beginPath();
-                            ctx.moveTo(c[0].x, c[0].y);
-                            for(let i = 1; i < c.length; i++) {
-                                ctx.lineTo(c[i].x, c[i].y);
-                            }
-                            ctx.closePath();
-                            ctx.stroke();   
-                        }
-                    });  
-
-                } else {
-                    // Режим Оригинал - подсвечиваем оранжевые кандидаты в маркеры
-                    if (detector.candidates) {
-                        ctx.strokeStyle = "orange";
-                        ctx.lineWidth = 2;
-                        detector.candidates.forEach(p => {
-                            ctx.beginPath();
-                            ctx.moveTo(p[0].x, p[0].y);
-                            for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
-                            ctx.closePath();
-                            ctx.stroke();   
-                        });    
-                    }
-                
-                    if (markers.length > 0) {
-                        statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
-                        ctx.strokeStyle = "#00ff87";
-                        ctx.lineWidth = 4;
-                        markers.forEach(m => {
-                            ctx.beginPath();
-                            ctx.moveTo(m.corners[0].x, m.corners[0].y);
-                            for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
-                            ctx.closePath();
-                            ctx.stroke();
-                        });    
-                    }
-                    debugLog.innerHTML = `<span style='color:#aaa'>Оригинал: кадры идут, найдено маркеров: ${markers.length}</span>`;
-                }
-                
-            } catch (err) {
-                debugLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 КРИТИЧЕСКИЙ СБОЙ: ${err.message}</span>`;
-            }
         }
 
         function cvImageToBrowserImageData(cvImg) {
@@ -444,7 +279,109 @@
             }        
             return imgData;
         }
-        
+
+        function analyzeFrame(imageData) {
+            // Обязательно скармливаем кадр детектору при каждом вызове анализа
+            const markers = detector.detect(imageData) || [];
+            const mode = selectView.value;
+            
+            // Вывод лога геометрии
+            if (window.lastGeometryLog && window.lastGeometryLog.length > 0) {
+                let html = "";
+                const sorted = window.lastGeometryLog.sort((a,b) => b.perimeter - a.perimeter).slice(0, 2);
+                sorted.forEach((item, index) => {
+                    const isSquare = item.detectedCorners === 4;
+                    html += `<div class="geo-item">
+                        #${index+1}: Перим=${item.perimeter}px |
+                        Углов: <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.detectedCorners}</b>
+                        ${isSquare ? '(ОК ✅)' : '(БРАК ❌)'}
+                    </div>`;
+                });
+                geoLog.innerHTML = html;
+            } else {
+                geoLog.innerHTML = "<div>Контуры не найдены. Сплошной фон.</div>";
+            }
+            
+            if (mode === "thresh") {
+                // Твоя рабочая и проверенная бинаризация
+                if (detector.thres && detector.thres.data) {
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const dst = imgData.data;
+                    const src = detector.thres.data;
+                    let j = 0;
+                    for (let i = 0; i < src.length; ++i) {
+                        let val = src[i];
+                        dst[j] = val;   
+                        dst[j+1] = val; 
+                        dst[j+2] = val; 
+                        j += 4;
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+                }    
+            } else if (mode === "contours") {
+                // Режим Сетки найденных линий
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.strokeStyle = "#00f3ff";
+                ctx.lineWidth = 1.5;
+                
+                // Используем кандидатов (полигоны), которые находит сам детектор ArUco
+                const lines = detector.candidates || [];
+                
+                if (lines.length > 0) {
+                    lines.forEach(p => {
+                        if (p && p.length >= 4) {
+                            ctx.beginPath();
+                            ctx.moveTo(p[0].x, p[0].y);
+                            for(let i = 1; i < p.length; i++) {
+                                ctx.lineTo(p[i].x, p[i].y);
+                            }
+                            ctx.closePath();
+                            ctx.stroke();  
+                        }
+                    });
+                    statusText.innerText = `Линий на холсте: ${lines.length * 4}`;
+                } else {
+                    statusText.innerText = "Сетка пуста. Линии не определены.";
+                }
+                
+            } else {       
+                // Режим: Оригинал (Цветной)
+                if (isFrozen && frozenImageData) {
+                    ctx.putImageData(frozenImageData, 0, 0);
+                }
+                
+                if (detector.candidates) {
+                    ctx.strokeStyle = "orange";
+                    ctx.lineWidth = 2;
+                    detector.candidates.forEach(p => {
+                        ctx.beginPath();
+                        ctx.moveTo(p[0].x, p[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
+                        ctx.closePath();
+                        ctx.stroke();   
+                    });    
+                }
+                
+                if (markers.length > 0) {
+                    statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
+                    ctx.strokeStyle = "#00ff87";
+                    ctx.lineWidth = 4;
+                    markers.forEach(m => {
+                        ctx.beginPath();
+                        ctx.moveTo(m.corners[0].x, m.corners[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });    
+                } else {
+                    statusText.innerText = isFrozen ? "Кадр заморожен." : "Камера активна.";
+                }
+            }    
+        }
+
+        // Единственный и чистый вызов слушателя в самом конце
         video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
     </script>
 </body>
