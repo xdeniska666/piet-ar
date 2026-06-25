@@ -110,6 +110,7 @@
         <div class="button-row">
             <button id="btn-freeze">⏸ ЗАМОРОЗИТЬ</button>
             <button id="btn-mock" style="background: #00ff87;">🔮 ТЕСТ ЭТАЛОНА</button>
+            <button id="btn-screenshot" class="btn">СДЕЛАТЬ СКРИНШОТ</button>
         </div>  
         <div>
             <select id="select-view">
@@ -148,6 +149,27 @@
 
         let detector = new AR.Detector();
         let isFrozen = false;
+
+        // === ДОБАВЛЯЕМ СЮДА КОД ДЛЯ СКРИНШОТА ===
+        document.getElementById('btn-screenshot').addEventListener('click', function() { 
+            if (!canvas) return;
+
+            // Конвертируем холст в изображение с хорошим качеством
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+            // Создаем ссылку для скачивания файла
+            const link = document.createElement('a');
+
+            // Генерируем имя файла с текущим временем (часы-минуты-секунды)
+            const date = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
+            link.download = `piet-ar-frame-${date}.jpg`;
+            link.href = dataUrl;
+            
+            // Эмулируем клик на планшете для сохранения в Загрузки
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });    
         let frozenImageData = null;
 
         // Метрики производительности и ядра
