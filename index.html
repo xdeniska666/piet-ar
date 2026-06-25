@@ -154,18 +154,41 @@
         document.getElementById('btn-screenshot').addEventListener('click', function() { 
             if (!canvas) return;
 
-            // Конвертируем холст в изображение с хорошим качеством
+            // 1. Сохраняем текущее состояние холста, чтобы не испортить живое видео
+            ctx.save();
+
+            // 2. Настраиваем шрифт для телеметрии на снимке
+            ctx.font = "bold 16px 'Roboto Mono', monospace";
+            ctx.fillStyle = "#00ff87"; // Красивый зеленый цвет для текста
+            ctx.textAlign = "left";
+
+            // 3. Собираем текст из твоих HTML плашек
+            const status = document.getElementById('status-text')?.innerText || "";
+            const fps = document.getElementById('tel-fps')?.innerText || "";
+            const geo = document.getElementById('geo-log')?.innerText || "";
+            
+            /// 4. Вживляем текст прямо в холст (в левый верхний угол с отступами)
+            ctx.fillText(status, 20, 30);
+            ctx.fillText(fps, 20, 55);
+
+            // Если есть логи или ошибки, выведем их чуть ниже красным цветом
+            if (geo) {
+                ctx.fillStyle = "#ff3838";
+                ctx.fillText(geo, 20, 80);
+            }
+            
+            // 5. Конвертируем получившийся пирог в изображение
             const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-            // Создаем ссылку для скачивания файла
-            const link = document.createElement('a');
+            // 6. Восстанавливаем холст (текст исчезнет с экрана, но останется на картинке)
+            ctx.restore();
 
-            // Генерируем имя файла с текущим временем (часы-минуты-секунды)
+            // 7. Скачиваем готовый файл
+            const link = document.createElement('a');
             const date = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
-            link.download = `piet-ar-frame-${date}.jpg`;
+            link.download = `piet-ar-telemetry-${date}.jpg`;
             link.href = dataUrl;
-            
-            // Эмулируем клик на планшете для сохранения в Загрузки
+
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
