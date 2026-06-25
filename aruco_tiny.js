@@ -29,35 +29,41 @@ CV.threshold = function(imageSrc, imageDst, threshold){
 };
 
 CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
-  var src = imageSrc.data, dst = imageDst.data, len = src.length, tab = [], i, j, k, it, y, x, sum, index;
+  var src = imageSrc.data, dst = imageDst.data, len = src.length,
+      width = imageSrc.width, height = imageSrc.height, y = 0, x = 0;
 
-  if (tab.length === 0){
-    for (i = 0; i < 256; ++ i){
-      tab[i] = i;
-    }
-  }
+  if (imageDst.data.length !== len){
+    imageDst.data = new Uint8Array(len);
+  } 
 
-  for (y = 0, i = 0; y < imageSrc.height; ++ y){
-    for (x = 0; x < imageSrc.width; ++ x, ++ i){
-      sum = 0;
-      for (j = -kernelSize; j <= kernelSize; ++ j){
-        for (k = -kernelSize; k <= kernelSize; ++ k){
-          it = y + j;
-          it = it < 0? 0: it >= imageSrc.height? imageSrc.height - 1: it;
-          index = it * imageSrc.width;
-          it = x + k;
-          it = it < 0? 0: it >= imageSrc.width? imageSrc.width - 1: it;
-          sum += src[index + it];
+  for (y = 0; y < height; ++ y){
+    var offset = y * width;
+    for (x = 0; x < width; ++ x){
+      var sum = 0, count = 0;
+      for (var ky = -kernelSize; ky <= kernelSize; ++ ky){
+        var ny = y + ky;
+        if (ny >= 0 && ny < height){
+          var noffset = ny * width;
+          for (var kx = -kernelSize; kx <= kernelSize; ++ kx){
+            var nx = x + kx;
+            if (nx >= 0 && nx < width){
+              sum += src[noffset + nx];
+              count++;
+            }
+          }
         }
       }
-      dst[i] = tab[ src[i] > (sum / ((kernelSize * 2 + 1) * (kernelSize * 2 + 1)) - threshold)? 255: 0 ];
+      var mean = sum / count;
+      dst[offset + x] = src[offset + x] < (mean - threshold) ? 255 : 0;
     }
   }
 
+  imageDst.width = width;
+  imageDst.height = height;
   return imageDst;
 };
 
-CV.otsu = function(imageSrc){
+/*CV.otsu = function(imageSrc){
   var src = imageSrc.data, len = src.length, i, hist = [], threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0, mu;
   
   for (i = 0; i < 256; ++ i){
@@ -83,249 +89,105 @@ CV.otsu = function(imageSrc){
   }
 
   return threshold;
-};
+};*/
 
-CV.findContours = function(imageSrc, binary){
-  var width = imageSrc.width, height = imageSrc.height, src = imageSrc.data, contours = [], poly, neighbor = [ [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0] ], i, j, k, l, x, y, nx, ny, curr, prev, next, start, isOuter;
+CV.findContours = function(imageSrc, contours) {  
+  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height;
+  var visited = new Uint8Array(width * height);
 
-  for (i = 0; i < width * height; ++ i){
-    binary[i] = 0;
-  }
+  // Направления: вправо, вниз, влево, вверх
+  var dx = [1, 0, -1, 0];
+  var dy = [0, 1, 0, -1];
 
-  for (y = 0, i = 0; y < height; ++ y){
-    for (x = 0; x < width; ++ x, ++ i){
-      if (src[i] !== 0 && binary[i] === 0){
-        isOuter = (y === 0 || src[i - width] === 0);
-        if (isOuter){
-          start = {x: x, y: y};
-          curr = {x: x, y: y};
-          prev = {x: x - 1, y: y};
-          poly = [];
-          
-          do{
-            poly.push( {x: curr.x, y: curr.y} );
-            binary[curr.y * width + curr.x] = 1;
-            next = null;
+  for (var y = 1; y < height - 1; ++y) {
+    for (var x = 1; x < width - 1; ++x) {
+      var idx = y * width + x;
+      
+      // Ищем белую пиксель-границу на черном фоне (в ArUco контуры инвертированы или выделены)
+      if (src[idx] === 255 && !visited[idx]) {
+        // Проверяем, крайний ли это пиксель
+        if (src[idx - 1] === 0 || src[idx + 1] === 0 || src[idx - width] === 0 || src[idx + width] === 0) {
+        
+          var contour = [];
+          var cx = x, cy = y;
+          var currIdx = idx;
+          var dir = 0;
+          var stepped = false;
             
-            for (j = 0; j < 8; ++ j){
-              for (k = 0; k < 8; ++ k){
-                if (neighbor[k][0] === prev.x - curr.x && neighbor[k][1] === prev.y - curr.y) break;
-              }
-              l = (k + 1 + j) % 8;
-              nx = curr.x + neighbor[l][0];
-              ny = curr.y + neighbor[l][1];
-              if (nx >= 0 && nx < width && ny >= 0 && ny < height && src[ny * width + nx] !== 0){
-                next = {x: nx, y: ny};
-                break;
+          // Трассировка границы по цепочке
+          do {
+            contour.push({x: cx, y: cy});
+            visited[currIdx] = 1;
+            stepped = false;
+            
+            for (var i = 0; i < 4; ++i) {
+              var nDir = (dir + i) % 4;
+              var nx = cx + dx[nDir];
+              var ny = cy + dy[nDir];
+              var nIdx = ny * width + nx;
+            
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                if (src[nIdx] === 255 && !visited[nIdx]) {
+                  cx = nx;
+                  cy = ny;
+                  currIdx = nIdx;
+                  dir = (nDir + 3) % 4; // Разворот вектора поиска
+                  stepped = true;
+                  break;
+                }  
               }
             }
-            
-            if (next){
-              prev = curr;
-              curr = next;
-            }else{
-              break;
-            }
-          }while (curr.x !== start.x || curr.y !== start.y);
-          
-          contours.push(poly);
+          } while (stepped && (cx !== x || cy !== y) && contour.length < 2000);
+ 
+          if (contour.length > 15) { // Минимальный фильтр шума по длине
+            contours.push(contour);
+          } 
         }
       }
     }
   }
-
   return contours;
 };
 
-CV.approxPolyDP = function(contour, epsilon){
-  var poly = [], len = contour.length, stack = [ [0, len - 1] ], index = 0, first, last, max, dist, i, item;
-
-  while (stack.length > 0){
-    item = stack.pop();
-    first = item[0];
-    last = item[1];
-    max = 0;
-    
-    for (i = first + 1; i < last; ++ i){
-      dist = CV.distancePointToLine(contour[i], contour[first], contour[last]);
-      if (dist > max){
-        max = dist;
-        index = i;
-      }
-    }
-    
-    if (max > epsilon){
-      stack.push( [index, last] );
-      stack.push( [first, index] );
-    }else{
-      poly.push(contour[first]);
-    }
-  }
-
-  return poly;
-};
-
-CV.distancePointToLine = function(p, a, b){
-  var dy = b.y - a.y, dx = b.x - a.x;
-  return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / Math.sqrt(dy * dy + dx * dx);
-};
-
-CV.isContourConvex = function(contour){
-  var len = contour.length, dx1, dy1, dx2, dy2, curr, prev, i, next;
-
-  if (len < 3) return false;
-
-  for (i = 0; i < len; ++ i){
-    prev = contour[ (i + len - 1) % len ];
-    curr = contour[i];
-    next = contour[ (i + 1) % len ];
-    
-    dx1 = curr.x - prev.x;
-    dy1 = curr.y - prev.y;
-    dx2 = next.x - curr.x;
-    dy2 = next.y - curr.y;
-    
-    if ( (dx1 * dy2 - dy1 * dx2) < 0) return false;
-  }
-
-  return true;
-};
-
-CV.perimeter = function(poly){
-  var len = poly.length, p = 0, dx, dy, i;
-
-  for (i = 0; i < len; ++ i){
-    dx = poly[ (i + 1) % len ].x - poly[i].x;
-    dy = poly[ (i + 1) % len ].y - poly[i].y;
+CV.perimeter = function(contour){
+  var len = contour.length, p = 0, i = 0, j = len - 1, dx = 0, dy = 0;
+  for (; i < len; j = i ++){
+    dx = contour[i].x - contour[j].x;
+    dy = contour[i].y - contour[j].y;
     p += Math.sqrt(dx * dx + dy * dy);
   }
-
   return p;
 };
 
-CV.minEdgeLength = function(poly){
-  var len = poly.length, min = Infinity, dx, dy, i;
+CV.approxPolyDP = function(contour, epsilon){
+  var len = contour.length, maxIdx = 0, maxDist = 0, d = 0, i = 1,
+      dx = 0, dy = 0, lenInv = 0, approx = [];
 
-  for (i = 0; i < len; ++ i){
-    dx = poly[ (i + 1) % len ].x - poly[i].x;
-    dy = poly[ (i + 1) % len ].y - poly[i].y;
-    min = Math.min(min, dx * dx + dy * dy);
-  }
-
-  return Math.sqrt(min);
-};
-
-CV.countNonZero = function(imageSrc, square){
-  var src = imageSrc.data, width = imageSrc.width, count = 0, x, y, i;
-
-  for (y = square.y; y < square.y + square.height; ++ y){
-    for (x = square.x; x < square.x + square.width; ++ x){
-      if (src[y * width + x] !== 0) count ++;
-    }
-  }
-
-  return count;
-};
-
-CV.warp = function(imageSrc, imageDst, contour, warpSize){
-  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2, z, x, y, i, j;
-
-  var m = CV.getPerspectiveTransform(contour, warpSize);
-
-  if (!imageDst.data || imageDst.data.length !== warpSize * warpSize) {
-    imageDst.data = new Uint8Array(warpSize * warpSize);
-  }
-  var dst = imageDst.data;  
-
-  for (i = 0; i < warpSize; ++ i){
-    for (j = 0; j < warpSize; ++ j){
-      z = m[6] * j + m[7] * i + m[8];
-      if (z === 0) continue;
-
-      x = (m[0] * j + m[1] * i + m[2]) / z;
-      y = (m[3] * j + m[4] * i + m[5]) / z;
-      
-      sx1 = x >>> 0; sy1 = y >>> 0;
-      sx2 = sx1 === width - 1? sx1: sx1 + 1;
-      sy2 = sy1 === height - 1? sy1: sy1 + 1;
-
-      if (sx1 >= width || sy1 >= height) {
-        dst[pos ++] = 0;
-        continue;
+  if (len > 2){
+    dx = contour[len - 1].x - contour[0].x;
+    dy = contour[len - 1].y - contour[0].y;
+    lenInv = 1.0 / Math.sqrt(dx * dx + dy * dy);
+    
+    for (; i < len - 1; ++ i){
+      d = Math.abs((contour[i].y - contour[0].y) * dx - (contour[i].x - contour[0].x) * dy) * lenInv;
+      if (d > maxDist){
+        maxDist = d;
+        maxIdx = i;
       }
-
-      dx1 = x - sx1; dy1 = y - sy1;
-      dx2 = 1.0 - dx1; dy2 = 1.0 - dy1;
-      
-      dst[pos ++] = (dy2 * (dx2 * src[sy1 * width + sx1] + dx1 * src[sy1 * width + sx2]) + 
-                     dy1 * (dx2 * src[sy2 * width + sx1] + dx1 * src[sy2 * width + sx2]) + 0.5) >>> 0;
-    }
-  }
-
-  imageDst.width = warpSize;
-  imageDst.height = warpSize;
-
-  return imageDst;
-};
-
-CV.getPerspectiveTransform = function(src, size){
-  var rq = CV.getQuadrilateralHypothesis(src);
-  return CV.getTransform(rq, [ {x: 0, y: 0}, {x: size - 1, y: 0}, {x: size - 1, y: size - 1}, {x: 0, y: size - 1} ]);
-};
-
-CV.getQuadrilateralHypothesis = function(src){
-  return [ src[0], src[1], src[2], src[3] ];
-};
-
-CV.getTransform = function(src, dst){
-  var a = [], b = [], i, x, y, u, v;
-
-  for (i = 0; i < 4; ++ i){
-    x = src[i].x; y = src[i].y;
-    u = dst[i].x; v = dst[i].y;
-    
-    a.push( [x, y, 1, 0, 0, 0, -u * x, -u * y] );
-    b.push(u);
-    
-    a.push( [0, 0, 0, x, y, 1, -v * x, -v * y] );
-    b.push(v);
-  }
-
-  var res = CV.solve(a, b);
-  res.push(1);
-
-  return res;
-};
-
-CV.solve = function(a, b){
-  var n = a.length, x = [], i, j, k, max, tmp, sum;
-
-  for (i = 0; i < n; ++ i){
-    max = i;
-    for (j = i + 1; j < n; ++ j){
-      if (Math.abs(a[j][i]) > Math.abs(a[max][i])) max = j;
     }
     
-    tmp = a[i]; a[i] = a[max]; a[max] = tmp;
-    tmp = b[i]; b[i] = b[max]; b[max] = tmp;
-    
-    for (j = i + 1; j < n; ++ j){
-      tmp = a[j][i] / a[i][i];
-      for (k = i + 1; k < n; ++ k) a[j][k] -= tmp * a[i][k];
-      b[j] -= tmp * b[i];
+    if (maxDist > epsilon){
+      approx = approx.concat( CV.approxPolyDP(contour.slice(0, maxIdx + 1), epsilon) );
+      approx = approx.concat( CV.approxPolyDP(contour.slice(maxIdx), epsilon) );
+    }else{
+      approx = [contour[0], contour[len - 1]];
     }
+  }else{
+    approx = contour;  
   }
 
-  for (i = n - 1; i >= 0; -- i){
-    sum = 0;
-    for (j = i + 1; j < n; ++ j) sum += a[i][j] * x[j];
-    x[i] = (b[i] - sum) / a[i][i];
-  }
-
-  return x;
+  return approx;
 };
-
-/* --- Начало части AR --- */
 
 var AR = AR || {};
 
@@ -338,308 +200,61 @@ AR.Detector = function(){
   this.grey = new CV.Image();
   this.thres = new CV.Image();
   this.homography = new CV.Image();
-  this.binary = [];
   this.contours = [];
-  this.polys = [];
   this.candidates = [];
 };
 
-AR.Detector.prototype.detect = function(image){
-  CV.grayscale(image, this.grey);
+AR.Detector.prototype.detect = function(imageSrc){
+  CV.grayscale(imageSrc, this.grey);
+  // Адаптивный порог под мелкое разрешение
+  CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
 
-  // Жестко отсекаем засветку. Все, что темнее 90 — станет идеально черным
-  CV.adaptiveThreshold(this.grey, this.thres, 2, 31);
-
-  this.contours = CV.findContours(this.thres, this.binary);
-
-  // Сохраняем промежуточные этапы для детального аудита
-  this.stage_total_contours = this.contours.length; // Сколько вообще стыков/линий нашла камера
-
-  // ГЛОБАЛЬНЫЙ МАССИВ ДЛЯ ДИАГНОСТИКИ УГЛОВ
-  window.lastGeometryLog = [];
-
-  // Безопасный вызов: проверяем наличие в прототипе, иначе ищем в глобальном контексте
-  var findCandidatesFn = this.findCandidates || (typeof findCandidates === 'function' ? findCandidates : null);
-  if (!findCandidatesFn) return [];
-    
-  // Логика поиска кандидатов вручную, чтобы вытащить количество углов ДО фильтрации
-  var candidates = [];
-  for (var i = 0; i < this.contours.length; ++ i) {
-    var contour = this.contours[i];
+  this.contours = [];
+  CV.findContours(this.thres, this.contours);
   
-    // Пропускаем слишком мелкие линии, как в оригинальном алгоритме
-    if (contour.length > image.width * 0.05) {
-      var approx = CV.approxPolyDP(contour, contour.length * 0.05);
+  this.candidates = [];
+  var i = 0, len = this.contours.length, contour = null, approx = null;
+
+  for (; i < len; ++ i){
+    contour = this.contours[i];
+
+    // Отрезанный лимит площади маркера (не менее 5% от ширины)
+    if (contour.length > imageSrc.width * 0.15){
+      // Рассчитываем epsilon от реального периметра контура
+      approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
-      // ЗАПИСЫВАЕМ ДАННЫЕ В ДИАГНОСТИКУ: сколько углов насчитала математика на этом контуре
-      window.lastGeometryLog.push({
-        perimeter: contour.length,
-        detectedCorners: approx.length
-      });
-      
-      if (approx.length === 4) {
-        if (CV.isContourConvex(approx)) {
-          var minDist = Infinity;
-          for (var j = 0; j < 4; ++ j) {
-            var d = CV.minAreaRect(approx); // Примерная оценка, берем упрощенно
+      if (approx.length === 4){
+        if (this.isConvex(approx)){
+          var minDist = 999999;
+          for (var j = 0; j < 4; ++ j){
+            var dx = approx[j].x - approx[(j + 1) % 4].x;
+            var dy = approx[j].y - approx[(j + 1) % 4].y;
+            var dist = dx * dx + dy * dy;
+            if (dist < minDist) minDist = dist;
+          }  
+          if (minDist > 100){
+            this.candidates.push(approx);
           }
-          candidates.push(approx);
         }
       }
     }
   }
   
-  candidates = this.clockwiseCorners(candidates);
-  candidates = this.notTooNear(candidates, 10);
-
-  this.stage_candidates = candidates.length;
-  this.candidates = candidates;
-
-  return this.findMarkers(this.grey, candidates, 49);
+  return this.contours; // Возвращаем сырые данные для рендеринга сетки
 };
 
-CV.warp = function(imageSrc, imageDst, contour, warpSize){
-  var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height, pos = 0, z, x, y, i, j;
-
-  var m = CV.getPerspectiveTransform(contour, warpSize);
-
-  if (!imageDst.data || imageDst.data.length !== warpSize * warpSize) {
-    imageDst.data = new Uint8Array(warpSize * warpSize);
-  }  
-  var dst = imageDst.data;
-
-  for (i = 0; i < warpSize; ++ i){
-    for (j = 0; j < warpSize; ++ j){
-      z = m[6] * j + m[7] * i + m[8];
-      if (z === 0) continue; // Защита от схлопывания перспективы
-
-      // Находим точные исходные координаты пикселя
-      x = ((m[0] * j + m[1] * i + m[2]) / z) >>> 0;
-      y = ((m[3] * j + m[4] * i + m[5]) / z) >>> 0;
-
-      // Защита от выхода за границы кадра касмеры
-      if (x >= width || y >= height) {
-        dst[pos ++] = 0;
-        continue;
-      }
-
-      // Метод ближайшего соседа: берем чистый пиксель без интерполяции и размытия
-      dst[pos ++] = src[y * width + x];
+AR.Detector.prototype.isConvex = function(contour){
+  var len = contour.length, i = 0, j = 0, k = 0, sign = 0;
+  for (; i < len; ++ i){
+    j = (i + 1) % len;
+    k = (i + 2) % len;
+    var z = (contour[j].x - contour[i].x) * (contour[k].y - contour[j].y) -
+            (contour[j].y - contour[i].y) * (contour[k].x - contour[j].x);
+    if (i === 0){
+      sign = z > 0? 1: z < 0? -1: 0;
+    }else if (z * sign < 0){  
+      return false;
     }
   }
-  
-  imageDst.width = warpSize;
-  imageDst.height = warpSize;
-
-  return imageDst;
-};  
-
-AR.Detector.prototype.getMarker = function(image, candidate){
-  var width = image.width;
-  var height = image.height;
-  
-  // ОПТИМИЗАЦИЯ СЭМПЛИРОВАНИЯ БИТОВ ПОД РАЗМЕР 240x320
-  // Смещаем точки взятия пикселей ближе к центру ячеек, чтобы избежать размытия углов
-  var inc = 4;
-  var src = [
-    candidate[0].x + inc, candidate[0].y + inc,
-    candidate[1].x - inc, candidate[1].y + inc,
-    candidate[2].x - inc, candidate[2].y - inc,
-    candidate[3].x + inc, candidate[3].y - inc
-  ];
-  
-  CV.warp(image, this.homography, src);
-
-  // Порог бинаризации внутренней матрицы
-  CV.threshold(this.homography, this.homography, 110);
-
-  // Считываем сетку 5x5 (стандарт ArUco)
-  var bits = [];
-  var i, j;
-  
-  for (i = 0; i < 5; ++ i){
-    bits[i] = [];
-    for (j = 0; j < 5; ++ j){
-      // Жестко берем центральный пиксель каждой ячейки
-      bits[i][j] = this.homography.data[ (i + 1) * 7 + (j + 1) ] > 0? 1: 0;
-      
-    }
-  }
-
-  // Считаем расстояние Хэмминга для всех 4 поворотов маркера
-  var rotations = [[], [], [], []];
-  var distances = [];
-
-  rotations[0] = bits;
-  distances[0] = this.hammingDistance( rotations[0] );
-
-  rotations[1] = this.rotate(rotations[0]);
-  distances[1] = this.hammingDistance(rotations[1]);
-
-  rotations[2] = this.rotate(rotations[1]);
-  distances[2] = this.hammingDistance(rotations[2]);
-
-  rotations[3] = this.rotate(rotations[2]);
-  distances[3] = this.hammingDistance(rotations[3]);
-
-  var pair = {first: distances[0], second: 0};
-  for (i = 1; i < 4; ++ i){
-    if (distances[i] < pair.first){
-      pair.first = distances[i];
-      pair.second = i;
-    }  
-  }
-    
-  // Метрика Хэмминга: разрешаем до 2 ошибочных бит для уверенного захвата в WebAR
-  /*if (pair.first > 2){
-    return null;
-  }
-  */
-
-  // ХАК: Полностью отключаем фильтр Хэмминга. Если геометрия нашла квадрат (зеленая рамка),
-  // мы насильно создаем маркер, вычисляя его ID из того, что считалось.
-  return new AR.Marker(
-    this.mat2id( rotations[pair.second] ), 
-    this.rotate2(candidate, 4 - pair.second)
-  );  
-};
-
-AR.Detector.prototype.clockwiseCorners = function(candidates){
-  var len = candidates.length, dx1, dx2, dy1, dy2, swap, i;
-
-  for (i = 0; i < len; ++ i){
-    dx1 = candidates[i][1].x - candidates[i][0].x;
-    dy1 = candidates[i][1].y - candidates[i][0].y;
-    dx2 = candidates[i][2].x - candidates[i][0].x;
-    dy2 = candidates[i][2].y - candidates[i][0].y;
-
-    if ( (dx1 * dy2 - dy1 * dx2) < 0){
-      swap = candidates[i][1];
-      candidates[i][1] = candidates[i][3];
-      candidates[i][3] = swap;
-    }
-  }
-
-  return candidates;
-};
-
-AR.Detector.prototype.notTooNear = function(candidates, minDist){
-  var notTooNear = [], len = candidates.length, dist, dx, dy, i, j, k;
-
-  for (i = 0; i < len; ++ i){
-  
-    for (j = i + 1; j < len; ++ j){
-      dist = 0;
-      
-      for (k = 0; k < 4; ++ k){
-        dx = candidates[i][k].x - candidates[j][k].x;
-        dy = candidates[i][k].y - candidates[j][k].y;
-      
-        dist += dx * dx + dy * dy;
-      }
-      
-      if ( (dist / 4) < (minDist * minDist) ){
-      
-        if ( CV.perimeter( candidates[i] ) < CV.perimeter( candidates[j] ) ){
-          candidates[i].tooNear = true;
-        }else{
-          candidates[j].tooNear = true;
-        }
-      }
-    }
-  }
-
-  for (i = 0; i < len; ++ i){
-    if ( !candidates[i].tooNear ){
-      notTooNear.push( candidates[i] );
-    }
-  }
-
-  return notTooNear;
-};
-
-AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
-  var markers = [], candidate, imageDst, marker, i;
-
-  for (i = 0; i < candidates.length; ++ i){
-    candidate = candidates[i];
-
-    // Вырезаем серое изображение из серого кадра
-    imageDst = CV.warp(imageSrc, this.homography, candidate, warpSize);
-
-    // Бинаризируем ТОЛЬКО маленький кусочек 140x140. Это не садит FPS!
-    CV.threshold(imageDst, imageDst, CV.otsu(imageDst));
-
-    marker = this.getMarker(imageDst, candidate);
-    if (marker){
-      markers.push(marker);
-    }
-  }
-  
-  return markers;
-};
-
-AR.Detector.prototype.hammingDistance = function(bits){
-  // Настоящая битовая матрица с твоей фотографии распечатанного маркера
-  var realDataset = [
-    [1, 0, 1, 1, 0],
-    [0, 0, 0, 1, 1],
-    [0, 0, 0, 1, 1],
-    [1, 0, 0, 0, 0],
-    [1, 0, 0, 1, 0]
-  ];
-
-  var errors = 0;
-
-  // Построчно сравниваем
-  for (var i = 0; i < 5; ++ i){
-    for (var j = 0; j < 5; ++ j){
-      if (bits[i][j] !== realDataset[i][j]){
-        errors ++;
-      }  
-    }  
-  }
-
-  return errors;
-};
-
-AR.Detector.prototype.mat2id = function(bits){
-  var id = 0;
-  
-  for (var i = 0; i < 5; ++ i){
-    for (var j = 0; j < 5; ++ j){
-      id <<= 1;
-      id |= bits[i][j];
-    }
-  }
-  
-  // Если это наш распечатанный маркер — жестко возвращаем ID: 1
-  if (id === 22033938) {
-    return 1;
-  }  
-
-  return 1; // Временно возвращаем 1 для любого совпадения по Хэммингу
-};
-
-AR.Detector.prototype.rotate = function(src){
-  var dst = [], len = src.length, i, j;
-  
-  for (i = 0; i < len; ++ i){
-    dst[i] = [];
-    for (j = 0; j < src[i].length; ++ j){
-      dst[i][j] = src[src[i].length - j - 1][i];
-    }
-  }
-
-  return dst;
-};
-
-AR.Detector.prototype.rotate2 = function(src, rotation){
-  var dst = [], len = src.length, i;
-  
-  for (i = 0; i < len; ++ i){
-    dst[i] = src[ (rotation + i) % len ];
-  }
-
-  return dst;
+  return true;
 };
