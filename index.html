@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_25_v48"></script>
+    <script src="aruco_tiny.js?v=2026_06_25_v49"></script>
 
     <style>
         body {
@@ -167,6 +167,10 @@
             if (CV.findContours) {
                 const originalFindContours = CV.findContours;
                 CV.findContours = function(src, dst) {
+                    // Форсируем дебаг-проверку входного буфера перед запуском
+                    if (!src || !src.data || src.data.length === 0) {
+                        return [];
+                    }    
                     const res = originalFindContours(src, dst);
                     telemetryData.rawContoursCount = dst ? dst.length : 0;
                     if (dst && dst.length > 0) {
@@ -194,6 +198,24 @@
             }
         }
         
+        // МОДИФИКАЦИЯ МЕТОДА ДЕТЕКЦИИ НА ХОДУ (Исправление конвейера данных)
+        if (detector && detector.detect) {
+            const originalDetect = detector.detect;
+            detector.detect = function(image) {
+                // Вызываем базовый метод, чтобы отработал встроенный пороговый фильтр
+                const res = originalDetect.call(this, image);
+
+                // Если после этого сырые контуры остались по нулям, принудительно 
+                // перезапускаем поиск контуров напрямую из thres в обход внутренних ограничений
+                if (telemetryData.rawContoursCount === 0 && this.thres && this.thres.data) {
+                    this.contours = [];
+                    CV.findContours(this.thres, this.contours);
+                    telemetryData.filteredContoursCount = this.contours.length;
+                }
+                return res;
+            };        
+        }
+            
         const constraints = {
             video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
         };
