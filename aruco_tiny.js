@@ -199,7 +199,7 @@ AR.Marker = function(id, corners){
 AR.Detector = function(){
   this.grey = new CV.Image();
   this.thres = new CV.Image();
-  this.homography = new CV.Image();
+  /*this.homography = new CV.Image();*/
   this.contours = [];
   this.candidates = [];
 };
@@ -240,7 +240,21 @@ AR.Detector.prototype.detect = function(imageSrc){
     }
   }
   
-  return this.contours; // Возвращаем сырые данные для рендеринга сетки
+  // Разбор кандидатов в маркеры
+  var markers = [];
+  for (i = 0; i < this.candidates.length; ++ i){
+    var marker = this.getMarker(this.thres, this.candidates[i]);
+    if (marker){
+      markers.push(marker);
+    }
+  }
+
+  // Если вызывающая программа просит сырые контуры для отладки
+  if (imageSrc.returnContours) {    
+    return this.contours;
+  }
+  
+  return markers;
 };
 
 AR.Detector.prototype.isConvex = function(contour){
@@ -258,3 +272,59 @@ AR.Detector.prototype.isConvex = function(contour){
   }
   return true;
 };
+
+// Функция быстрого разбора пикселей внутри четырехугольника без тяжелой гомографии
+AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
+  var width = imageThres.width;
+  var height = imageThres.height;
+  var src = imageThres.data;
+
+  // Находим центр четырехугольника
+  var minX = Math.min(imageCorners[0].x, imageCorners[1].x, imageCorners[2].x, imageCorners[3].x);
+  var maxX = Math.max(imageCorners[0].x, imageCorners[1].x, imageCorners[2].x, imageCorners[3].x);
+  var minY = Math.min(imageCorners[0].y, imageCorners[1].y, imageCorners[2].y, imageCorners[3].y);
+  var maxY = Math.max(imageCorners[0].y, imageCorners[1].y, imageCorners[2].y, imageCorners[3].y);
+
+  // Сетка 5x5 для чтения ArUco битов
+  var bits = [];
+  for (var i = 0; i < 5; ++i) {
+    bits[i] = new Array(5);
+    var yPercent = (i + 0.5) / 5;
+    var currY = Math.floor(minY + (maxY - minY) * yPercent);
+
+    for (var j = 0; j < 5; ++j) {
+      var xPercent = (j + 0.5) / 5;
+      var currX = Math.floor(minX + (maxX - minX) * xPercent);
+
+      var idx = currY * width + currX;
+      // Если пиксель белый (255) - это 1, черный - 0
+      bits[i][j] = (src[idx] === 255) ? 1 : 0;
+    }
+  }
+  
+  // Твой зашитый паттерн маркера с распечатанного листа
+  var realDataset = [
+    [1, 1, 1, 1, 0],
+    [0, 0, 1, 1, 1],
+    [1, 1, 1, 1, 0],
+    [0, 1, 0, 0, 0],
+    [1, 1, 0, 0, 1] 
+  ];
+  
+  // Считаем ошибки совпадения
+  var errors = 0;
+  for (var y = 0; y < 5; ++y) {
+    for (var x = 0; x < 5; ++x) {
+      if (bits[y][x] !== realDataset[y][x]) {
+        errors++;
+      }
+    }    
+  }
+  
+  // Если совпало более чем на 70%, считаем маркер валидным
+  if (errors <= 7) {
+    return new AR.Marker(100, imageCorners); // Возвращаем ID 100 и его углы
+  }
+  
+  return null;
+};  
