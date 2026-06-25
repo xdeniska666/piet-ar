@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_24_v46"></script>
+    <script src="aruco_tiny.js?v=2026_06_25_v47"></script>
 
     <style>
         body {
@@ -148,18 +148,15 @@
             const originalApproxPolyDP = CV.approxPolyDP;
             CV.approxPolyDP = function(contour, epsilon) {
                 const approx = originalApproxPolyDP(contour, epsilon);
-                frameApproxLogs(contour.length, approx.length);
+                // Сохраняем информацию о длине контура и найденных углах
+                currentFrameApprox.push({
+                    contour: contour.length,
+                    corners: approx.length
+                });    
                 return approx;
             };
         }
 
-        function frameApproxLogs(contourLen, approxLen) {
-            currentFrameApprox.push({
-                contour: contourLen,
-                corners: approxLen
-            });
-        }
-        
         const constraints = {
             video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
         };
@@ -281,7 +278,7 @@
                         </div>`;
                     });
                 } else if (countContours > 0) {
-                    html += `<div style="color: #ff9900;">Линии отсекаются встроенным фильтром библиотеки.</div>`;
+                    html += `<div style="color: #ff9900;">Контуры отсекаются внутренним фильтром библиотеки.</div>`;
                 } else {
                     html += `<div>Линии не найдены. Сплошной фон.</div>`;
                 }
