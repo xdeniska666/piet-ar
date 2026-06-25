@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Piet-AR | Лаборатория отладки</title>
+    <title>Piet-AR | Телеметрия v48</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_25_v47"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="aruco_tiny.js?v=2026_06_25_v48"></script>
 
     <style>
         body {
             background: #0b0d19;
             color: #fff;
-            font-family: sans-serif;
+            font-family: 'Roboto Mono', monospace;
             margin: 0;
             padding: 10px;
             display: flex;
@@ -44,6 +44,7 @@
             border: none;
             border-radius: 4px;
             font-size: 12px;
+            font-family: inherit;
         }
         
         select {
@@ -53,7 +54,8 @@
             color: #fff;
             border: 1px solid #00f3ff;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 13px;
+            font-family: inherit;
             display: block;
         }
         
@@ -80,22 +82,26 @@
         }
         
         #geo-inspector {
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(11, 13, 25, 0.95);
             border: 1px solid #00f3ff;
             border-radius: 4px;
             padding: 10px;
             margin-top: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 140px;
+            font-size: 11px;
+            max-height: 160px;
             overflow-y: auto;
+            box-shadow: inset 0 0 10px rgba(0,243,255,0.2);
         }
         
-        .geo-item {
-            margin-bottom: 4px;
-            border-bottom: 1px solid #222;
-            padding-bottom: 4px;
-        }    
+        .telemetry-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #1f2540;
+        }
+        .tel-label { color: #aaa; }
+        .tel-val { font-weight: bold; color: #fff; }
     </style>
 </head>
 <body>
@@ -112,7 +118,7 @@
                 <option value="contours">Режим: Сетка найденных линий</option>    
             </select>
         </div>
-        <div id="status-text" style="font-size: 11px; color: #aaa; text-align: center; margin-top: 8px;">Камера активна.</div>
+        <div id="status-text" style="font-size: 11px; color: #aaa; text-align: center; margin-top: 8px;">Инициализация...</div>
     </div>
 
     <div class="view-container">
@@ -121,8 +127,11 @@
     </div>
         
     <div id="geo-inspector">
-        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 5px;">🔍 ИНСПЕКТОР БИБЛИОТЕКИ:</div>
-        <div id="geo-log">Ожидание первого кадра...</div>  
+        <div style="color: #00f3ff; font-weight: bold; margin-bottom: 6px; display: flex; justify-content: space-between;">
+            <span>📊 СИСТЕМНАЯ ТЕЛЕМЕТРИЯ:</span>
+            <span id="tel-fps" style="color: #ff9900;">0 FPS</span>
+        </div>
+        <div id="geo-log">Сбор метрик...</div>  
     </div>   
 
     <script>
@@ -135,28 +144,56 @@
         const selectView = document.getElementById('select-view');
         const statusText = document.getElementById('status-text');
         const geoLog = document.getElementById('geo-log');
+        const telFps = document.getElementById('tel-fps');
 
         let detector = new AR.Detector();
         let isFrozen = false;
         let frozenImageData = null;
 
-        // Массив для перехвата данных аппроксимации на каждом кадре
-        let currentFrameApprox = [];
+        // Метрики производительности и ядра
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let telemetryData = {
+            rawContoursCount: 0,
+            filteredContoursCount: 0,
+            maxContourPoints: 0,
+            approxPolyCalls: 0,
+            quadCandidates: 0
+        };
 
-        // ПЕРЕХВАТ ФУНКЦИИ АППРОКСИМАЦИИ ДЛЯ ИНСПЕКТОРА
-        if (typeof CV !== 'undefined' && CV.approxPolyDP) {
-            const originalApproxPolyDP = CV.approxPolyDP;
-            CV.approxPolyDP = function(contour, epsilon) {
-                const approx = originalApproxPolyDP(contour, epsilon);
-                // Сохраняем информацию о длине контура и найденных углах
-                currentFrameApprox.push({
-                    contour: contour.length,
-                    corners: approx.length
-                });    
-                return approx;
-            };
+        // ИНЖЕКЦИЯ В ЯДРО CV (Глубокий перехват)
+        if (typeof CV !== 'undefined') {
+            // Перехват поиска контуров
+            if (CV.findContours) {
+                const originalFindContours = CV.findContours;
+                CV.findContours = function(src, dst) {
+                    const res = originalFindContours(src, dst);
+                    telemetryData.rawContoursCount = dst ? dst.length : 0;
+                    if (dst && dst.length > 0) {
+                        let maxPts = 0;
+                        dst.forEach(c => { if(c.length > maxPts) maxPts = c.length; });
+                        telemetryData.maxContourPoints = maxPts;
+                    } else {
+                        telemetryData.maxContourPoints = 0;
+                    }
+                    return res;
+                };
+            }
+
+            // Перехват полигональной аппроксимации
+            if (CV.approxPolyDP) {
+                const originalApproxPolyDP = CV.approxPolyDP;
+                CV.approxPolyDP = function(contour, epsilon) {
+                    telemetryData.approxPolyCalls++;
+                    const approx = originalApproxPolyDP(contour, epsilon);
+                    if (approx && approx.length === 4) {
+                        telemetryData.quadCandidates++;
+                    }
+                    return approx;
+                };
+            }
         }
-
+        
         const constraints = {
             video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
         };
@@ -164,11 +201,11 @@
         navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => {
                 video.srcObject = stream; 
-                statusText.innerText = "Поток с камеры получен.";
+                statusText.innerText = "Камера подключена.";
             })    
             .catch(err => {
-                alert("Ошибка камеры: " + err.message); 
-                statusText.innerText = "Камера заблокирована.";
+                alert("Ошибка медиапотока: " + err.message); 
+                statusText.innerText = "Доступ ограничен.";
             });    
 
         btnFreeze.addEventListener('click', () => {
@@ -177,13 +214,13 @@
                 btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
                 btnFreeze.style.background = "#ff3838";
                 btnFreeze.style.color = "#fff";
-                statusText.innerText = "Кадр заморожен.";
+                statusText.innerText = "Заморожено.";
                 frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             } else {
                 btnFreeze.innerText = "⏸ ЗАМОРОЗИТЬ";
                 btnFreeze.style.background = "#00f3ff";
                 btnFreeze.style.color = "#000";
-                statusText.innerText = "Камера активна.";
+                statusText.innerText = "Сканирование...";
                 frozenImageData = null;
                 requestAnimationFrame(processLoop);
             }
@@ -194,7 +231,7 @@
             btnFreeze.innerText = "▶ ЗАПУСТИТЬ КАМЕРУ";
             btnFreeze.style.background = "#ff3838";
             btnFreeze.style.color = "#fff";
-            statusText.innerText = "Тестирование эталонного цифрового маркера...";
+            statusText.innerText = "Генерация эталона...";
 
             canvas.width = 240;
             canvas.height = 320;
@@ -242,50 +279,49 @@
             if (isFrozen) return;
             
             if (video.videoWidth && video.videoHeight) { 
-                // Твои оригинальные, проверенные рабочие пропорции холста
                 if (canvas.width !== 240 || canvas.height !== 320) {
                     canvas.width = 240;
                     canvas.height = 320;
                 }
                 
-                // Твоя исходная чистая отрисовка кадра
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 analyzeFrame(currentImgData);
             }
+            
+            // Расчет FPS
+            frameCount++;
+            const now = performance.now();
+            if (now >= lastTime + 1000) {
+                telFps.innerText = `${Math.round((frameCount * 1000) / (now - lastTime))} FPS`;
+                frameCount = 0;
+                lastTime = now;
+            }
+
             requestAnimationFrame(processLoop);
         }
 
         function analyzeFrame(imageData) {
             try {
-                // Очищаем массив перехвата перед вызовом детектора
-                currentFrameApprox = [];
+                // Сброс счетчиков текущего кадра перед детекцией
+                telemetryData.approxPolyCalls = 0;
+                telemetryData.quadCandidates = 0;
 
                 const markers = detector.detect(imageData) || [];
                 const mode = selectView.value;
 
-                // Вывод запрашиваемых логов на экран смартфона
-                const countContours = (detector.contours || []).length;
-                let html = `<div>Contours: <b>${countContours}</b></div>`;
+                telemetryData.filteredContoursCount = (detector.contours || []).length;
 
-                if (currentFrameApprox.length > 0) {
-                    // Сортируем контуры по убыванию длины и берем топ-3 для вывода
-                    const sortedApprox = currentFrameApprox.sort((a, b) => b.contour - a.contour).slice(0, 3);
-                    sortedApprox.forEach((item, index) => {
-                        const isSquare = item.corners === 4;
-                        html += `<div class="geo-item" style="font-size: 11px; margin-top: 2px;">
-                            #${index+1}: Contour: <b>${item.contour}</b> | Corners: <b style="color:${isSquare ? '#00ff87' : '#ff3838'}">${item.corners}</b>
-                        </div>`;
-                    });
-                } else if (countContours > 0) {
-                    html += `<div style="color: #ff9900;">Контуры отсекаются внутренним фильтром библиотеки.</div>`;
-                } else {
-                    html += `<div>Линии не найдены. Сплошной фон.</div>`;
-                }
-                geoLog.innerHTML = html;
+                // Генерация лога телеметрии
+                geoLog.innerHTML = `
+                    <div class="telemetry-row"><span class="tel-label">Сырые контуры (findContours):</span><span class="tel-val">${telemetryData.rawContoursCount}</span></div>
+                    <div class="telemetry-row"><span class="tel-label">Макс. точек в одном контуре:</span><span class="tel-val">${telemetryData.maxContourPoints}</span></div>
+                    <div class="telemetry-row"><span class="tel-label">Прошли первый фильтр ядра:</span><span class="tel-val">${telemetryData.filteredContoursCount}</span></div>
+                    <div class="telemetry-row"><span class="tel-label">Вызовы approxPolyDP:</span><span class="tel-val">${telemetryData.approxPolyCalls}</span></div>
+                    <div class="telemetry-row"><span class="tel-label">Найденные четырехугольники:</span><span class="tel-val" style="color: ${telemetryData.quadCandidates > 0 ? '#00ff87' : '#fff'}">${telemetryData.quadCandidates}</span></div>
+                `;
                     
                 if (mode === "thresh") {
-                    // Твоя оригинальная циклическая бинаризация пикселей
                     if (detector.thres && detector.thres.data) {
                         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                         const dst = imgData.data;
@@ -319,7 +355,7 @@
                                 ctx.stroke();
                             }
                         });
-                        statusText.innerText = `Отрисовано контуров: ${rawContours.length}`;
+                        statusText.innerText = `Контуров отрисовано: ${rawContours.length}`;
                     } else {
                         statusText.innerText = "Сетка пуста.";
                     }
@@ -341,7 +377,7 @@
                     }      
 
                     if (markers.length > 0) {
-                        statusText.innerText = `🎉 РАСПОЗНАН ID: ${markers[0].id}`;
+                        statusText.innerText = `🎉 ID: ${markers[0].id}`;
                         ctx.strokeStyle = "#00ff87";
                         ctx.lineWidth = 4;
                         markers.forEach(m => {
@@ -352,37 +388,15 @@
                             ctx.stroke();
                         });
                     } else {
-                        statusText.innerText = isFrozen ? "Кадр заморожен." : "Камера активна.";
+                        statusText.innerText = isFrozen ? "Заморожено." : "Сканирование...";
                     }
                 }    
             } catch (err) {
-                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 СБОЙ АНАЛИЗА: ${err.message}</span>`;
+                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА ДЕТЕКЦИИ: ${err.message}</span>`;
             }
         }
         
-        // Обновление замороженного кадра при смене режима фильтра
-        selectView.addEventListener('change', () => {
-            if (isFrozen && frozenImageData) {
-                analyzeFrame(frozenImageData);
-            }
-        });
-
         video.addEventListener('play', () => { requestAnimationFrame(processLoop); });
-
-        function cvImageToBrowserImageData(cvImg) {
-            const imgData = ctx.createImageData(cvImg.width, cvImg.height);
-            let dst = imgData.data;
-            let src = cvImg.data;
-            let j = 0;
-            for (let i = 0; i < src.length; ++i) {
-                let val = src[i];
-                dst[j++] = val; 
-                dst[j++] = val; 
-                dst[j++] = val; 
-                dst[j++] = 255;
-            }        
-            return imgData;
-        }
     </script>
 </body>
 </html>
