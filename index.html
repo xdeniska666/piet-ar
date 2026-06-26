@@ -154,49 +154,67 @@
         document.getElementById('btn-screenshot').addEventListener('click', function() { 
             if (!canvas) return;
 
-            // 1. Сохраняем контекст перед рендером
-            ctx.save();
+            // 1. Создаем виртуальный холст увеличенного размера
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
 
-            // 2. Рисуем темную подложку внизу экрана для читаемости (высотой 90px)
-            ctx.fillStyle = "rgba(11, 13, 25, 0.85)";
-            ctx.fillRect(0, canvas.height - 90, canvas.width, 90);
+            // Высота дополнительной черной панели для инфы
+            const panelHeight = 100;
 
-            // 3. Настраиваем компактный моноширинный шрифт
-            ctx.font = "bold 16px 'Roboto Mono', monospace";
+            // Задаем размеры: ширина как у оригинала, высота = оригинал + панель
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height + panelHeight;
+
+            // 2. Копируем чистое изображение с основного холста (камера + рамки)
+            tempCtx.drawImage(canvas, 0, 0);
+
+            // 3. Заливаем нижнюю добавленную панель чисто черным цветом
+            tempCtx.fillStyle = "#000000";
+            tempCtx.fillRect(0, canvas.height, tempCanvas.width, panelHeight);
+
+            // 4. Настраиваем шрифт для красивого вывода консоли
+            tempCtx.font = "11px 'Roboto Mono', monospace";
             ctx.textAlign = "left";
 
-            // 4. Достаем статус и FPS напрямую
+            // Достаем текстовые значения из интерфейса
             const status = statusText?.innerText || "Сканирование...";
             const fps = telFps?.innerText || "0 FPS";
             
-            // Выводим верхнюю строчку оверлея
-            ctx.fillStyle = "#00f3ff"; // Голубой
-            ctx.fillText(`СТАТУС: ${status}`, 10, canvas.height - 75);
-            ctx.fillStyle = "#ff9900"; // Оранжевый FPS
-            ctx.fillText(`[${fps}]`, canvas.width - 60, canvas.height - 75);
+            // Строка 1: Статус и FPS (яркие цвета)
+            tempCtx.fillStyle = "#00f3ff"; // Голубой статус
+            tempCtx.fillText(`СТАТУС: ${status}`, 10, canvas.height + 20);
+            
+            tempCtx.fillStyle = "#ff9900"; // Оранжевый FPS
+            tempCtx.fillText(`[${fps}]`, tempCanvas.width - 65, canvas.height + 20);
 
-            // 5. Аккуратно вытаскиваем метрики из telemetryData построчно, чтобы текст не резался
-            ctx.fillStyle = "#aaa";
-            ctx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}`, 10, canvas.height - 55);
-            ctx.fillText(`Фильтр ядра: ${telemetryData.filteredContoursCount}`, 10, canvas.height - 40);
+            // Разделительная серая линия между статусом и метриками
+            tempCtx.strokeStyle = "#222";
+            tempCtx.beginPath();
+            tempCtx.moveTo(5, canvas.height + 32);
+            tempCtx.lineTo(tempCanvas.width - 5, canvas.height + 32);
+            tempCtx.stroke();
 
-            // Подсветим зеленым, если нашелся четырехугольник
+            // Строка 2: Сырые контуры
+            tempCtx.fillStyle = "#aaaaaa";
+            tempCtx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}`, 10, canvas.height + 48);
+
+            // Строка 3: Фильтр ядра
+            tempCtx.fillText(`Фильтр ядра: ${telemetryData.filteredContoursCount}`, 10, canvas.height + 65);
+
+            // Строка 4: Четырехугольники (если нашли - подсветим зеленым)
             if (telemetryData.quadCandidates > 0) {
                 ctx.fillStyle = "#00ff87";
                 ctx.font = "bold 11px 'Roboto Mono', monospace";
             }
-            ctx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 10, canvas.height - 25);
+            tempCtx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 10, canvas.height + 82);
             
-            // 6. Запекаем пирог в JPEG
+            // 5. Запекаем этот соединенный пирог в JPEG файл
             const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-            // 7. Возвращаем холст в исходное состояние для живого видео
-            ctx.restore();
-
-            // 8. Скачиваем файл
+            // 6. Скачиваем готовый аккуратный файл
             const link = document.createElement('a');
             const date = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
-            link.download = `piet-ar-telemetry-${date}.jpg`;
+            link.download = `piet-ar-panel-${date}.jpg`;
             link.href = dataUrl;
 
             document.body.appendChild(link);
