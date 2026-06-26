@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="aruco_tiny.js?v=2026_06_25_v49"></script>
+    <script src="aruco_tiny.js?v=2026_06_25_v50"></script>
 
     <style>
         body {
@@ -154,36 +154,46 @@
         document.getElementById('btn-screenshot').addEventListener('click', function() { 
             if (!canvas) return;
 
-            // 1. Сохраняем текущее состояние холста, чтобы не испортить живое видео
+            // 1. Сохраняем контекст перед рендером
             ctx.save();
 
-            // 2. Настраиваем шрифт для телеметрии на снимке
+            // 2. Рисуем темную подложку внизу экрана для читаемости (высотой 90px)
+            ctx.fillStyle = "rgba(11, 13, 25, 0.85)";
+            ctx.fillRect(0, canvas.height - 90, canvas.width, 90);
+
+            // 3. Настраиваем компактный моноширинный шрифт
             ctx.font = "bold 16px 'Roboto Mono', monospace";
-            ctx.fillStyle = "#00ff87"; // Красивый зеленый цвет для текста
             ctx.textAlign = "left";
 
-            // 3. Собираем текст из твоих HTML плашек
-            const status = document.getElementById('status-text')?.innerText || "";
-            const fps = document.getElementById('tel-fps')?.innerText || "";
-            const geo = document.getElementById('geo-log')?.innerText || "";
+            // 4. Достаем статус и FPS напрямую
+            const status = statusText?.innerText || "Сканирование...";
+            const fps = telFps?.innerText || "0 FPS";
             
-            /// 4. Вживляем текст прямо в холст (в левый верхний угол с отступами)
-            ctx.fillText(status, 20, 30);
-            ctx.fillText(fps, 20, 55);
+            // Выводим верхнюю строчку оверлея
+            ctx.fillStyle = "#00f3ff"; // Голубой
+            ctx.fillText(`СТАТУС: ${status}`, 10, canvas.height - 75);
+            ctx.fillStyle = "#ff9900"; // Оранжевый FPS
+            ctx.fillText(`[${fps}]`, canvas.width - 60, canvas.height - 75);
 
-            // Если есть логи или ошибки, выведем их чуть ниже красным цветом
-            if (geo) {
-                ctx.fillStyle = "#ff3838";
-                ctx.fillText(geo, 20, 80);
+            // 5. Аккуратно вытаскиваем метрики из telemetryData построчно, чтобы текст не резался
+            ctx.fillStyle = "#aaa";
+            ctx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}`, 10, canvas.height - 55);
+            ctx.fillText(`Фильтр ядра: ${telemetryData.filteredContoursCount}`, 10, canvas.height - 40);
+
+            // Подсветим зеленым, если нашелся четырехугольник
+            if (telemetryData.quadCandidates > 0) {
+                ctx.fillStyle = "#00ff87";
+                ctx.font = "bold 11px 'Roboto Mono', monospace";
             }
+            ctx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 10, canvas.height - 25);
             
-            // 5. Конвертируем получившийся пирог в изображение
+            // 6. Запекаем пирог в JPEG
             const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-            // 6. Восстанавливаем холст (текст исчезнет с экрана, но останется на картинке)
+            // 7. Возвращаем холст в исходное состояние для живого видео
             ctx.restore();
 
-            // 7. Скачиваем готовый файл
+            // 8. Скачиваем файл
             const link = document.createElement('a');
             const date = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
             link.download = `piet-ar-telemetry-${date}.jpg`;
