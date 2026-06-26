@@ -156,7 +156,7 @@
 
             // Коэффициент масштабирования для четкости (увеличиваем в 4 раза)
             const scale = 4;
-            const panelHeight = 110; // Высота черной панели
+            const panelHeight = 135; // Высота черной панели
 
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
@@ -202,6 +202,7 @@
             // Строка 2: Метрики контуров
             tempCtx.font = "14px 'Roboto Mono', monospace";
             tempCtx.fillStyle = "#aaaaaa";
+
             tempCtx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}  |  Фильтр ядра: ${telemetryData.filteredContoursCount}`, 20, (canvas.height * scale) + 70);
     
             // Строка 3: Четырехугольники
@@ -209,7 +210,7 @@
                 tempCtx.fillStyle = "#00ff87";
                 tempCtx.font = "bold 14px 'Roboto Mono', monospace";
             }
-            tempCtx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 20, (canvas.height * scale) + 95);
+            tempCtx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 20, (canvas.height * scale) + 120);
 
             // 4. Сохраняем в JPEG
             const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.95);
