@@ -154,67 +154,70 @@
         document.getElementById('btn-screenshot').addEventListener('click', function() { 
             if (!canvas) return;
 
-            // 1. Создаем виртуальный холст увеличенного размера
+            // Коэффициент масштабирования для четкости (увеличиваем в 4 раза)
+            const scale = 4;
+            const panelHeight = 110; // Высота черной панели
+
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
 
-            // Высота дополнительной черной панели для инфы
-            const panelHeight = 100;
+            // Задаем большие размеры для высокого разрешения
+            tempCanvas.width = canvas.width * scale;
+            tempCanvas.height = (canvas.height * scale) + panelHeight;
 
-            // Задаем размеры: ширина как у оригинала, высота = оригинал + панель
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height + panelHeight;
+            // Включаем сглаживание для красивого масштабирования кадра камеры
+            tempCtx.imageSmoothingEnabled = true;
+            tempCtx.imageSmoothingQuality = 'high';
 
-            // 2. Копируем чистое изображение с основного холста (камера + рамки)
-            tempCtx.drawImage(canvas, 0, 0);
+            // 1. Создаем виртуальный холст увеличенного размера
+            tempCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width * scale, canvas.height * scale);
 
-            // 3. Заливаем нижнюю добавленную панель чисто черным цветом
+            // 2. Рисуем черную панель снизу под увеличенным кадром
             tempCtx.fillStyle = "#000000";
-            tempCtx.fillRect(0, canvas.height, tempCanvas.width, panelHeight);
+            tempCtx.fillRect(0, canvas.height * scale, tempCanvas.width, panelHeight);
 
-            // 4. Настраиваем шрифт для красивого вывода консоли
-            tempCtx.font = "11px 'Roboto Mono', monospace";
-            ctx.textAlign = "left";
+            // 3. Настраиваем крупный четкий шрифт (размер увеличен)
+            tempCtx.font = "bold 16px 'Roboto Mono', monospace";
+            tempCtx.textAlign = "left";
 
-            // Достаем текстовые значения из интерфейса
             const status = statusText?.innerText || "Сканирование...";
             const fps = telFps?.innerText || "0 FPS";
-            
-            // Строка 1: Статус и FPS (яркие цвета)
-            tempCtx.fillStyle = "#00f3ff"; // Голубой статус
-            tempCtx.fillText(`СТАТУС: ${status}`, 10, canvas.height + 20);
-            
-            tempCtx.fillStyle = "#ff9900"; // Оранжевый FPS
-            tempCtx.fillText(`[${fps}]`, tempCanvas.width - 65, canvas.height + 20);
 
-            // Разделительная серая линия между статусом и метриками
+            // Строка 1: Статус
+            tempCtx.fillStyle = "#00f3ff";
+            tempCtx.fillText(`СТАТУС: ${status}`, 20, (canvas.height * scale) + 30);
+
+            // FPS справа
+            tempCtx.fillStyle = "#ff9900";
+            tempCtx.fillText(`[${fps}]`, tempCanvas.width - 110, (canvas.height * scale) + 30);
+
+            // Разделительная линия
             tempCtx.strokeStyle = "#222";
+            tempCtx.lineWidth = 2;
             tempCtx.beginPath();
-            tempCtx.moveTo(5, canvas.height + 32);
-            tempCtx.lineTo(tempCanvas.width - 5, canvas.height + 32);
+            tempCtx.moveTo(15, (canvas.height * scale) + 45);
+            tempCtx.lineTo(tempCanvas.width - 15, (canvas.height * scale) + 45);
             tempCtx.stroke();
 
-            // Строка 2: Сырые контуры
+            // Строка 2: Метрики контуров
+            tempCtx.font = "14px 'Roboto Mono', monospace";
             tempCtx.fillStyle = "#aaaaaa";
-            tempCtx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}`, 10, canvas.height + 48);
-
-            // Строка 3: Фильтр ядра
-            tempCtx.fillText(`Фильтр ядра: ${telemetryData.filteredContoursCount}`, 10, canvas.height + 65);
-
-            // Строка 4: Четырехугольники (если нашли - подсветим зеленым)
+            tempCtx.fillText(`Сырые контуры: ${telemetryData.rawContoursCount}  |  Фильтр ядра: ${telemetryData.filteredContoursCount}`, 20, (canvas.height * scale) + 70);
+    
+            // Строка 3: Четырехугольники
             if (telemetryData.quadCandidates > 0) {
-                ctx.fillStyle = "#00ff87";
-                ctx.font = "bold 11px 'Roboto Mono', monospace";
+                tempCtx.fillStyle = "#00ff87";
+                tempCtx.font = "bold 14px 'Roboto Mono', monospace";
             }
-            tempCtx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 10, canvas.height + 82);
-            
-            // 5. Запекаем этот соединенный пирог в JPEG файл
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            tempCtx.fillText(`Четырехугольники: ${telemetryData.quadCandidates}`, 20, (canvas.height * scale) + 95);
 
-            // 6. Скачиваем готовый аккуратный файл
+            // 4. Сохраняем в JPEG
+            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.95);
+
+            // 5. Скачивание
             const link = document.createElement('a');
             const date = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
-            link.download = `piet-ar-panel-${date}.jpg`;
+            link.download = `piet-ar-hd-${date}.jpg`;
             link.href = dataUrl;
 
             document.body.appendChild(link);
