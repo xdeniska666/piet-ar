@@ -279,30 +279,38 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var height = imageThres.height;
   var src = imageThres.data;
 
-  // Находим центр четырехугольника
-  var minX = Math.min(imageCorners[0].x, imageCorners[1].x, imageCorners[2].x, imageCorners[3].x);
-  var maxX = Math.max(imageCorners[0].x, imageCorners[1].x, imageCorners[2].x, imageCorners[3].x);
-  var minY = Math.min(imageCorners[0].y, imageCorners[1].y, imageCorners[2].y, imageCorners[3].y);
-  var maxY = Math.max(imageCorners[0].y, imageCorners[1].y, imageCorners[2].y, imageCorners[3].y);
-
-  // Сетка 5x5 для чтения ArUco битов
+  // Сетка 5x5 для чтения внутренних битов Piet-AR
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = new Array(5);
-    var yPercent = (i + 0.5) / 5;
-    var currY = Math.floor(minY + (maxY - minY) * yPercent);
+
+    // Смещаем шаг, чтобы читать строго внутренности блоков, игнорируя внешнюю рамку
+    var vPercent = (i + 0.5) / 5;
 
     for (var j = 0; j < 5; ++j) {
-      var xPercent = (j + 0.5) / 5;
-      var currX = Math.floor(minX + (maxX - minX) * xPercent);
+      var hPercent = (j + 0.5) / 5;
+
+      // Билинейная интерполяция по 4 точкам для компенсации наклона камеры
+      var topX = imageCorners[0].x + (imageCorners[1].x - imageCorners[0].x) * hPercent;
+      var topY = imageCorners[0].y + (imageCorners[1].y - imageCorners[0].y) * hPercent;
+
+      var bottomX = imageCorners[3].x + (imageCorners[2].x - imageCorners[3].x) * hPercent;
+      var bottomY = imageCorners[3].y + (imageCorners[2].y - imageCorners[3].y) * hPercent;
+
+      var currX = Math.floor(topX + (bottomX - topX) * vPercent);
+      var currY = Math.floor(topY + (bottomY - topY) * vPercent);
+
+      // Ограничиваем координаты границами кадра
+      currX = Math.max(0, Math.min(width - 1, currX));
+      currY = Math.max(0, Math.min(height - 1, currY));
 
       var idx = currY * width + currX;
       // Если пиксель белый (255) - это 1, черный - 0
       bits[i][j] = (src[idx] === 255) ? 1 : 0;
-    }
+    }  
   }
-  
-  // Твой зашитый паттерн маркера с распечатанного листа
+
+  // Эталонный датасет маркера Мондриана
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -311,19 +319,36 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     [1, 1, 0, 0, 1] 
   ];
   
-  // Считаем ошибки совпадения
-  var errors = 0;
-  for (var y = 0; y < 5; ++y) {
-    for (var x = 0; x < 5; ++x) {
-      if (bits[y][x] !== realDataset[y][x]) {
-        errors++;
-      }
-    }    
+  // Проверяем совпадение во всех 4 возможных поворотах маркера
+  var bestErrors = 100;
+
+  for (var rotation = 0; rotation < 4; ++rotation) {
+    var errors = 0;
+
+    for (var y = 0; y < 5; ++y) {
+      for (var x = 0; x < 5; ++x) {
+        var rotX = x;
+        var rotX = x;
+      
+        // Матричный поворот сетки на 90 градусов
+        if (rotation === 1) { rotX = y; rotY = 4 - x; }
+        else if (rotation === 2) { rotX = 4 - x; rotY = 4 - y; }
+        else if (rotation === 3) { rotX = 4 - y; rotY = x; }
+
+        if (bits[rotY][rotX] !== realDataset[y][x]) {
+          errors++;
+        }
+      }    
+    }
+  
+    if (errors < bestErrors) {
+      bestErrors = errors;
+    }
   }
   
-  // Если совпало более чем на 70%, считаем маркер валидным
-  if (errors <= 7) {
-    return new AR.Marker(100, imageCorners); // Возвращаем ID 100 и его углы
+  // Допускаем до 5 ошибочных пикселей из-за шумов камеры (точность ~80%)
+  if (bestErrors <= 5) {
+    return new AR.Marker(100, imageCorners);
   }
   
   return null;
