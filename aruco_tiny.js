@@ -275,44 +275,92 @@ AR.Detector.prototype.isConvex = function(contour){
 
 // Финальная версия с двойной проверкой полярности (инверсии) пикселей
 // Универсальная версия: проверяет контур и как внешний (с рамкой), и как внутренний (без рамки)
+// Полностью исправленная senior-версия getMarker по аудиту конвейера
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
   var height = imageThres.height;
   var src = imageThres.data;
 
+  // Математически точное вычисление матрицы гомографии без преждевременных округлений
   function getPerspectiveTransform(srcPts, dstSize) {
     var x0 = srcPts[0].x, y0 = srcPts[0].y;
     var x1 = srcPts[1].x, y1 = srcPts[1].y;
     var x2 = srcPts[2].x, y2 = srcPts[2].y;
     var x3 = srcPts[3].x, y3 = srcPts[3].y;
+
     var dx1 = x1 - x2, dy1 = y1 - y2;
     var dx2 = x3 - x2, dy2 = y3 - y2;
     var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
+    
     var a11, a12, a13, a21, a22, a23, a31, a32;
+    
     if (dx3 === 0 && dy3 === 0) {
       a11 = x1 - x0; a12 = x2 - x1; a13 = x0;
       a21 = y1 - y0; a22 = y2 - y1; a23 = y0;
       a31 = 0;       a32 = 0;
     } else {
       var gDen = dx1 * dy2 - dx2 * dy1;
-      a31 = gDen !== 0 ? (dx3 * dy2 - dx2 * dy3) / gDen : 0;
-      a32 = gDen !== 0 ? (dx1 * dy3 - dx3 * dy1) / gDen : 0;
-      a11 = x1 - x0 + a31 * x1; a12 = x3 - x0 + a32 * x3; a13 = x0;
-      a21 = y1 - y0 + a31 * y1; a22 = y3 - y0 + a32 * y3; a23 = y0;
+      if (gDen === 0) return null;
+      a31 = (dx3 * dy2 - dx2 * dy3) / gDen;
+      a32 = (dx1 * dy3 - dx3 * dy1) / gDen;
+      
+      a11 = x1 - x0 + a31 * x1;
+      a12 = x3 - x0 + a32 * x3;
+      a13 = x0;
+      a21 = y1 - y0 + a31 * y1;
+      a22 = y3 - y0 + a32 * y3;
+      a23 = y0;
     }
+    
+    // Возвращаем точные float-координаты
     return function(px, py) {
       var den = a31 * px + a32 * py + 1;
       if (den === 0) return { x: 0, y: 0 };
       return {
-        x: Math.floor((a11 * px + a12 * py + a13) / den),
-        y: Math.floor((a21 * px + a22 * py + a23) / den)
+        x: (a11 * px + a12 * py + a13) / den,
+        y: (a21 * px + a22 * py + a23) / den
       };
     };
   }
 
-  // Выпрямляем четырехугольник в стандартную матрицу 100x100 пикселей
-  var transform = getPerspectiveTransform(imageCorners, 100);
+  // Строим проектор на сетку 140x140
+  var transform = getPerspectiveTransform(imageCorners, 140);
+  if (!transform) return null;
   
+  var bits = [];
+  var invBits = [];
+
+  for (var i = 0; i < 5; ++i) {
+    bits[i] = new Array(5);
+    invBits[i] = new Array(5);
+    
+    // Внешняя рамка занимает по 20 условных пикселей с краев. 
+    // Шаг внутренней ячейки равен 20 пикселям. Сэмплируем строго из центров ячеек.
+    var yOffset = 20 + (i + 0.5) * 20;
+
+    for (var j = 0; j < 5; ++j) {
+      var xOffset = 20 + (j + 0.5) * 20;
+      
+      // ИСПРАВЛЕНО: Передаем чистые координаты без деления на 140!
+      var pt = transform(xOffset, yOffset);
+      
+      // Округляем координаты строго в самый последний момент перед обращением к массиву
+      var cx = Math.floor(pt.x);
+      var cy = Math.floor(pt.y);
+      
+      cx = Math.max(0, Math.min(width - 1, cx));
+      cy = Math.max(0, Math.min(height - 1, cy));
+      
+      var idx = cy * width + cx;
+
+      // ИСПРАВЛЕНО: Заменили жесткое "=== 255" на порог "> 127" для защиты от шумов
+      var val = (src[idx] > 127) ? 1 : 0;
+      bits[i][j] = val;
+      invBits[i][j] = (val === 1) ? 0 : 1; 
+    }
+  }
+
+  // Эталонный датасет Piet-AR
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -321,65 +369,11 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     [1, 1, 0, 0, 1]
   ];
 
-  // Массив для хранения прочитанных пикселей
-  var samplePixels = function(borderSize) {
-    var matrix = [];
-    for (var i = 0; i < 5; ++i) {
-      matrix[i] = [];
-      // Если borderSize > 0, сжимаем зону чтения внутрь, отступая от краев рамки
-      var start = borderSize;
-      var step = (100 - borderSize * 2) / 5;
-      var yOffset = start + (i + 0.5) * step;
-
-      for (var j = 0; j < 5; ++j) {
-        var xOffset = start + (j + 0.5) * step;
-        var pt = transform(xOffset / 100, yOffset / 100);
-        
-        var cx = Math.max(0, Math.min(width - 1, pt.x));
-        var cy = Math.max(0, Math.min(height - 1, pt.y));
-        var idx = cy * width + cx;
-        
-        matrix[i][j] = (src[idx] === 255) ? 1 : 0;
-      }
-    }
-    return matrix;
-  };
-
-  // Генерируем варианты чтения:
-  // 1. Предполагаем, что контур ВНЕШНИЙ (отступ рамки ~14% от ширины с каждого края)
-  var matOuter = samplePixels(14);
-  // 2. Предполагаем, что контур ВНУТРЕННИЙ (без рамки, отступ 0)
-  var matInner = samplePixels(0);
-
   var bestErrors = 100;
 
-  // Проверяем все варианты полярности, поворотов и типов контуров
+  // Анализируем 4 возможных разворота кадра
   for (var rotation = 0; rotation < 4; ++rotation) {
-    for (var y = 0; y < 5; ++y) {
-      for (var x = 0; x < 5; ++x) {
-        var rotX = x;
-        var rotY = y;
-
-        if (rotation === 1) { rotX = y; rotY = 4 - x; }
-        else if (rotation === 2) { rotX = 4 - x; rotY = 4 - y; }
-        else if (rotation === 3) { rotX = 4 - y; rotY = x; }
-
-        var target = realDataset[y][x];
-
-        // Проверяем совпадение для внешнего контура (прямой и инвертированный)
-        if (matOuter[rotY][rotX] !== target) checkError(matOuter[rotY][rotX], target);
-        
-        // Вспомогательная функция подсчета минимальной ошибки по всем гипотезам
-        function checkDiff(val, target, id) {
-          return val !== target ? 1 : 0;
-        }
-      }
-    }
-  }
-
-  // Перепишем цикл сверки более прозрачно для надежности
-  for (var rotation = 0; rotation < 4; ++rotation) {
-    var eOut = 0, eOutInv = 0, eIn = 0, eInInv = 0;
+    var eOut = 0, eOutInv = 0;
 
     for (var y = 0; y < 5; ++y) {
       for (var x = 0; x < 5; ++x) {
@@ -390,21 +384,19 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
 
         var target = realDataset[y][x];
 
-        if (matOuter[ry][rx] !== target) eOut++;
-        if ((matOuter[ry][rx] === 1 ? 0 : 1) !== target) eOutInv++;
-        
-        if (matInner[ry][rx] !== target) eIn++;
-        if ((matInner[ry][rx] === 1 ? 0 : 1) !== target) eInInv++;
+        if (bits[ry][rx] !== target) eOut++;
+        if (invBits[ry][rx] !== target) eOutInv++;
       }
     }
-    var minCur = Math.min(eOut, eOutInv, eIn, eInInv);
+    
+    var minCur = Math.min(eOut, eOutInv);
     if (minCur < bestErrors) {
       bestErrors = minCur;
     }
   }
 
-  // Допускаем до 6 ошибок (устойчивость к шумам)
-  if (bestErrors <= 6) {
+  // Порог удержания ошибок ставим на 5 для чистой фильтрации ложных четырехугольников
+  if (bestErrors <= 5) {
     return new AR.Marker(100, imageCorners);
   }
 
