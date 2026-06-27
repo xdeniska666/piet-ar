@@ -279,33 +279,72 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var height = imageThres.height;
   var src = imageThres.data;
 
+  // Функция для вычисления проективной матрицы (гомографии) по 4 точкам
+  function getPerspectiveTransform(srcPts, dstSize) {
+    var x0 = srcPts[0].x, y0 = srcPts[0].y;
+    var x1 = srcPts[1].x, y1 = srcPts[1].y;
+    var x2 = srcPts[2].x, y2 = srcPts[2].y;
+    var x3 = srcPts[3].x, y3 = srcPts[3].y;
+
+    var w = dstSize, h = dstSize;
+
+    var dx1 = x1 - x2, dy1 = y1 - y2;
+    var dx2 = x3 - x2, dy2 = y3 - y2;
+    var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
+
+    var a11, a12, a13, a21, a22, a23, a31, a32;
+
+    if (dx3 === 0 && dy3 === 0) {
+      a11 = x1 - x0; a12 = x2 - x1; a13 = x0;
+      a21 = y1 - y0; a22 = y2 - y1; a23 = y0;
+      a31 = 0;       a32 = 0;
+    } else {
+      var gDen = dx1 * dy2 - dx2 * dy1;
+      var a31_top = dx3 * dy2 - dx2 * dy3;
+      var a32_top = dx1 * dy3 - dx3 * dy1;
+
+      a31 = gDen !== 0 ? a31_top / gDen : 0;
+      a32 = gDen !== 0 ? a32_top / gDen : 0;
+
+      a11 = x1 - x0 + a31 * x1;
+      a12 = x3 - x0 + a32 * x3;
+      a13 = x0;
+      a21 = y1 - y0 + a31 * y1;
+      a22 = y3 - y0 + a32 * y3;
+      a23 = y0;
+    }
+    
+    return function(px, py) {
+      var den = a31 * px + a32 * py + 1;
+      if (den === 0) return { x: 0, y: 0 };
+      return {
+        x: Math.floor((a11 * px + a12 * py + a13) / den),
+        y: Math.floor((a21 * px + a22 * py + a23) / den)
+      };
+    };
+  }
+
+  // Создаем проектор кадра в квадрат 100x100 пикселей
+  var transform = getPerspectiveTransform(imageCorners, 100);
+
   // Сетка 5x5 для чтения внутренних битов Piet-AR
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = new Array(5);
-
-    // Смещаем шаг, чтобы читать строго внутренности блоков, игнорируя внешнюю рамку
-    var vPercent = (i + 0.5) / 5;
+    // Рассчитываем центры ячеек внутри выпрямленного квадрата 100x100
+    var yOffset = Math.floor((i + 0.5) * 20);
 
     for (var j = 0; j < 5; ++j) {
-      var hPercent = (j + 0.5) / 5;
+      var xOffset = Math.floor((j + 0.5) * 20);
 
-      // Билинейная интерполяция по 4 точкам для компенсации наклона камеры
-      var topX = imageCorners[0].x + (imageCorners[1].x - imageCorners[0].x) * hPercent;
-      var topY = imageCorners[0].y + (imageCorners[1].y - imageCorners[0].y) * hPercent;
+      // Проецируем координаты обратно на исходный кадр камеры
+      var pt = transform(xOffset / 100, yOffset / 100);
 
-      var bottomX = imageCorners[3].x + (imageCorners[2].x - imageCorners[3].x) * hPercent;
-      var bottomY = imageCorners[3].y + (imageCorners[2].y - imageCorners[3].y) * hPercent;
+      var cx = Math.max(0, Math.min(width - 1, pt.x));
+      var cy = Math.max(0, Math.min(height - 1, pt.y));
 
-      var currX = Math.floor(topX + (bottomX - topX) * vPercent);
-      var currY = Math.floor(topY + (bottomY - topY) * vPercent);
-
-      // Ограничиваем координаты границами кадра
-      currX = Math.max(0, Math.min(width - 1, currX));
-      currY = Math.max(0, Math.min(height - 1, currY));
-
-      var idx = currY * width + currX;
-      // Если пиксель белый (255) - это 1, черный - 0
+      var idx = cy * width + cx;
+      // 255 - белый, 0 - черный
       bits[i][j] = (src[idx] === 255) ? 1 : 0;
     }  
   }
@@ -346,9 +385,9 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
   
-  // Допускаем до 5 ошибочных пикселей из-за шумов камеры (точность ~80%)
-  if (bestErrors <= 5) {
-    return new AR.Marker(100, imageCorners);
+  // Допускаем до 6 ошибочных пикселей (высокая устойчивость к шумам и бликам под углами)
+  if (bestErrors <= 6) {
+    return new AR.Marker(100, imageCorners); // Возвращаем ID 100
   }
   
   return null;
