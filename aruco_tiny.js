@@ -274,46 +274,33 @@ AR.Detector.prototype.isConvex = function(contour){
 };
 
 // Функция быстрого разбора пикселей внутри четырехугольника без тяжелой гомографии
+// Финальная версия с двойной проверкой полярности (инверсии) пикселей
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
   var height = imageThres.height;
   var src = imageThres.data;
 
-  // Функция для вычисления проективной матрицы (гомографии) по 4 точкам
   function getPerspectiveTransform(srcPts, dstSize) {
     var x0 = srcPts[0].x, y0 = srcPts[0].y;
     var x1 = srcPts[1].x, y1 = srcPts[1].y;
     var x2 = srcPts[2].x, y2 = srcPts[2].y;
     var x3 = srcPts[3].x, y3 = srcPts[3].y;
-
     var w = dstSize, h = dstSize;
-
     var dx1 = x1 - x2, dy1 = y1 - y2;
     var dx2 = x3 - x2, dy2 = y3 - y2;
     var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
-
     var a11, a12, a13, a21, a22, a23, a31, a32;
-
     if (dx3 === 0 && dy3 === 0) {
       a11 = x1 - x0; a12 = x2 - x1; a13 = x0;
       a21 = y1 - y0; a22 = y2 - y1; a23 = y0;
       a31 = 0;       a32 = 0;
     } else {
       var gDen = dx1 * dy2 - dx2 * dy1;
-      var a31_top = dx3 * dy2 - dx2 * dy3;
-      var a32_top = dx1 * dy3 - dx3 * dy1;
-
-      a31 = gDen !== 0 ? a31_top / gDen : 0;
-      a32 = gDen !== 0 ? a32_top / gDen : 0;
-
-      a11 = x1 - x0 + a31 * x1;
-      a12 = x3 - x0 + a32 * x3;
-      a13 = x0;
-      a21 = y1 - y0 + a31 * y1;
-      a22 = y3 - y0 + a32 * y3;
-      a23 = y0;
+      a31 = gDen !== 0 ? (dx3 * dy2 - dx2 * dy3) / gDen : 0;
+      a32 = gDen !== 0 ? (dx1 * dy3 - dx3 * dy1) / gDen : 0;
+      a11 = x1 - x0 + a31 * x1; a12 = x3 - x0 + a32 * x3; a13 = x0;
+      a21 = y1 - y0 + a31 * y1; a22 = y3 - y0 + a32 * y3; a23 = y0;
     }
-    
     return function(px, py) {
       var den = a31 * px + a32 * py + 1;
       if (den === 0) return { x: 0, y: 0 };
@@ -324,71 +311,71 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     };
   }
 
-  // Создаем проектор кадра в квадрат 100x100 пикселей
   var transform = getPerspectiveTransform(imageCorners, 100);
-
-  // Сетка 5x5 для чтения внутренних битов Piet-AR
+  
+  // Прямая матрица битов
   var bits = [];
+  // Инвертированная матрица (0 меняем на 1, 1 на 0)
+  var invBits = [];
+
   for (var i = 0; i < 5; ++i) {
     bits[i] = new Array(5);
-    // Рассчитываем центры ячеек внутри выпрямленного квадрата 100x100
+    invBits[i] = new Array(5);
     var yOffset = Math.floor((i + 0.5) * 20);
 
     for (var j = 0; j < 5; ++j) {
       var xOffset = Math.floor((j + 0.5) * 20);
-
-      // Проецируем координаты обратно на исходный кадр камеры
       var pt = transform(xOffset / 100, yOffset / 100);
-
+      
       var cx = Math.max(0, Math.min(width - 1, pt.x));
       var cy = Math.max(0, Math.min(height - 1, pt.y));
-
       var idx = cy * width + cx;
-      // 255 - белый, 0 - черный
-      bits[i][j] = (src[idx] === 255) ? 1 : 0;
-    }  
+
+      var val = (src[idx] === 255) ? 1 : 0;
+      bits[i][j] = val;
+      invBits[i][j] = (val === 1) ? 0 : 1; 
+    }
   }
 
-  // Эталонный датасет маркера Мондриана
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
     [1, 1, 1, 1, 0],
     [0, 1, 0, 0, 0],
-    [1, 1, 0, 0, 1] 
+    [1, 1, 0, 0, 1]
   ];
-  
-  // Проверяем совпадение во всех 4 возможных поворотах маркера
+
   var bestErrors = 100;
 
+  // Проверяем 4 поворота для обычной И для инвертированной матрицы
   for (var rotation = 0; rotation < 4; ++rotation) {
     var errors = 0;
+    var errorsInv = 0;
 
     for (var y = 0; y < 5; ++y) {
       for (var x = 0; x < 5; ++x) {
         var rotX = x;
-        var rotX = x;
-      
-        // Матричный поворот сетки на 90 градусов
+        var rotY = y;
+
         if (rotation === 1) { rotX = y; rotY = 4 - x; }
         else if (rotation === 2) { rotX = 4 - x; rotY = 4 - y; }
         else if (rotation === 3) { rotX = 4 - y; rotY = x; }
 
-        if (bits[rotY][rotX] !== realDataset[y][x]) {
-          errors++;
-        }
-      }    
+        if (bits[rotY][rotX] !== realDataset[y][x]) errors++;
+        if (invBits[rotY][rotX] !== realDataset[y][x]) errorsInv++;
+      }
     }
-  
-    if (errors < bestErrors) {
-      bestErrors = errors;
+
+    var minCur = Math.min(errors, errorsInv);
+    if (minCur < bestErrors) {
+      bestErrors = minCur;
     }
   }
-  
-  // Допускаем до 6 ошибочных пикселей (высокая устойчивость к шумам и бликам под углами)
-  if (bestErrors <= 6) {
-    return new AR.Marker(100, imageCorners); // Возвращаем ID 100
+
+  // Порог удержания ошибок подняли до 7 для максимальной гибкости под углами
+  if (bestErrors <= 7) {
+    return new AR.Marker(100, imageCorners);
   }
-  
+
   return null;
 };  
