@@ -276,65 +276,45 @@ AR.Detector.prototype.isConvex = function(contour){
 // Глобальный буфер для вывода матрицы на экран дебага
 window.lastReadMatrix = null;
 
-// Полностью автономная отладка 7х7 с корректным масштабом гомографии
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
   var height = imageThres.height;
   var src = imageThres.data;
 
-  function getPerspectiveTransform(srcPts, dstSize) {
-    var x0 = srcPts[0].x, y0 = srcPts[0].y;
-    var x1 = srcPts[1].x, y1 = srcPts[1].y;
-    var x2 = srcPts[2].x, y2 = srcPts[2].y;
-    var x3 = srcPts[3].x, y3 = srcPts[3].y;
-    var dx1 = x1 - x2, dy1 = y1 - y2;
-    var dx2 = x3 - x2, dy2 = y3 - y2;
-    var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
-    var a11, a12, a13, a21, a22, a23, a31, a32;
+  // Прямая интерполяция координат внутри четырехугольника (без гомографии)
+  function getPointInQuad(corners, perX, perY) {
+    // Интерполируем верхнюю грань (между углами 0 и 1)
+    var topX = corners[0].x + (corners[1].x - corners[0].x) * perX;
+    var topY = corners[0].y + (corners[1].y - corners[0].y) * perX;
     
-    if (dx3 === 0 && dy3 === 0) {
-      a11 = x1 - x0; a12 = x2 - x1; a13 = x0;
-      a21 = y1 - y0; a22 = y2 - y1; a23 = y0;
-      a31 = 0;       a32 = 0;
-    } else {
-      var gDen = dx1 * dy2 - dx2 * dy1;
-      if (gDen === 0) return null;
-      // Рассчитываем нормированные коэффициенты относительно dstSize
-      a31 = (dx3 * dy2 - dx2 * dy3) / gDen;
-      a32 = (dx1 * dy3 - dx3 * dy1) / gDen;
-      a11 = (x1 - x0) / dstSize + a31 * x1 / dstSize; 
-      a12 = (x3 - x0) / dstSize + a32 * x3 / dstSize; 
-      a13 = x0;
-      a21 = (y1 - y0) / dstSize + a31 * y1 / dstSize; 
-      a22 = (y3 - y0) / dstSize + a32 * y3 / dstSize; 
-      a23 = y0;
-    }
-    return function(px, py) {
-      var den = a31 * px + a32 * py + 1;
-      if (den === 0) return { x: 0, y: 0 };
-      return { x: (a11 * px + a12 * py + a13) / den, y: (a21 * px + a22 * py + a23) / den };
+    // Интерполируем нижнюю грань (между углами 3 и 2)
+    var botX = corners[3].x + (corners[2].x - corners[3].x) * perX;
+    var botY = corners[3].y + (corners[2].y - corners[3].y) * perX;
+    
+    // Финальная вертикальная интерполяция между полученными точками
+    return {
+      x: topX + (botX - topX) * perY,
+      y: topY + (botY - topY) * perY
     };
   }
 
-  // Задаем физический масштаб координатной сетки 70 на 70 пикселей
-  var transform = getPerspectiveTransform(imageCorners, 70);
-  if (!transform) return null;
-  
   var fullMatrix = [];
   var fullMatrixInv = [];
 
-  // Строим сетку 7x7 с шагом в 10 условных единиц. Центр первой ячейки — 5, второй — 15 и т.д.
+  // Строим сетку 7x7, включая внешнюю рамку маркера
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
     fullMatrixInv[i] = [];
-    var yOffset = (i + 0.5) * 10;
+    var yPercent = (i + 0.5) / 7;
 
     for (var j = 0; j < 7; ++j) {
-      var xOffset = (j + 0.5) * 10;
-      var pt = transform(xOffset, yOffset);
+      var xPercent = (j + 0.5) / 7;
+      
+      var pt = getPointInQuad(imageCorners, xPercent, yPercent);
       
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
+      
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
       
@@ -346,7 +326,7 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
 
-  // Вырезаем центральную зону данных 5x5
+  // Вырезаем центральное ядро Piet-AR 5x5 (отсекаем рамку безопасности)
   var bits = [];
   var invBits = [];
   for (var i = 0; i < 5; ++i) {
@@ -358,7 +338,7 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
 
-  // Сохраняем в глобальный буфер для вывода на экран в index.html
+  // ЖЕЛЕЗОБЕТОННО: Сохраняем результат в буфер ДО любых проверок на ошибки
   window.lastReadMatrix = bits;
 
   var realDataset = [
@@ -379,7 +359,7 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
         var rx = x, ry = y;
         if (rotation === 1) { rx = y; ry = 4 - x; }
         else if (rotation === 2) { rx = 4 - x; ry = 4 - y; }
-        else if (rotation === 3) { rx = 4 - y; ry = x; }
+        else if (rotation === 3) { rx = 4 - y; rx = x; } // Исправлен индекс поворота
 
         var target = realDataset[y][x];
 
@@ -394,7 +374,7 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
 
-  // Разрешаем до 6 ошибок для устойчивости кадра
+  // Порог фильтрации шумов кадра
   if (bestErrors <= 6) {
     return new AR.Marker(100, imageCorners);
   }
