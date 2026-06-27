@@ -273,7 +273,6 @@ AR.Detector.prototype.isConvex = function(contour){
   return true;
 };
 
-// Функция быстрого разбора пикселей внутри четырехугольника без тяжелой гомографии
 // Финальная версия с двойной проверкой полярности (инверсии) пикселей
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
@@ -311,7 +310,7 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     };
   }
 
-  var transform = getPerspectiveTransform(imageCorners, 100);
+  var transform = getPerspectiveTransform(imageCorners, 140);
   
   // Прямая матрица битов
   var bits = [];
@@ -321,11 +320,13 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   for (var i = 0; i < 5; ++i) {
     bits[i] = new Array(5);
     invBits[i] = new Array(5);
-    var yOffset = Math.floor((i + 0.5) * 20);
+
+    // Сдвигаемся внутрь виртуального холста мимо рамки (20 пикселей рамка + центры ячеек по 20 пикселей)
+    var yOffset = 20 + Math.floor((i + 0.5) * 20);
 
     for (var j = 0; j < 5; ++j) {
-      var xOffset = Math.floor((j + 0.5) * 20);
-      var pt = transform(xOffset / 100, yOffset / 100);
+      var xOffset = 20 + Math.floor((j + 0.5) * 20);
+      var pt = transform(xOffset / 140, yOffset / 140);
       
       var cx = Math.max(0, Math.min(width - 1, pt.x));
       var cy = Math.max(0, Math.min(height - 1, pt.y));
@@ -372,8 +373,8 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
 
-  // Порог удержания ошибок подняли до 7 для максимальной гибкости под углами
-  if (bestErrors <= 7) {
+  // Допускаем погрешность до 6 пикселей для стабильного удержания фокуса камеры
+  if (bestErrors <= 6) {
     return new AR.Marker(100, imageCorners);
   }
 
