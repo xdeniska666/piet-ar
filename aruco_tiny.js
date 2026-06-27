@@ -274,6 +274,7 @@ AR.Detector.prototype.isConvex = function(contour){
 };
 
 // Финальная версия с двойной проверкой полярности (инверсии) пикселей
+// Универсальная версия: проверяет контур и как внешний (с рамкой), и как внутренний (без рамки)
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
   var height = imageThres.height;
@@ -284,7 +285,6 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     var x1 = srcPts[1].x, y1 = srcPts[1].y;
     var x2 = srcPts[2].x, y2 = srcPts[2].y;
     var x3 = srcPts[3].x, y3 = srcPts[3].y;
-    var w = dstSize, h = dstSize;
     var dx1 = x1 - x2, dy1 = y1 - y2;
     var dx2 = x3 - x2, dy2 = y3 - y2;
     var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
@@ -310,34 +310,9 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     };
   }
 
-  var transform = getPerspectiveTransform(imageCorners, 140);
+  // Выпрямляем четырехугольник в стандартную матрицу 100x100 пикселей
+  var transform = getPerspectiveTransform(imageCorners, 100);
   
-  // Прямая матрица битов
-  var bits = [];
-  // Инвертированная матрица (0 меняем на 1, 1 на 0)
-  var invBits = [];
-
-  for (var i = 0; i < 5; ++i) {
-    bits[i] = new Array(5);
-    invBits[i] = new Array(5);
-
-    // Сдвигаемся внутрь виртуального холста мимо рамки (20 пикселей рамка + центры ячеек по 20 пикселей)
-    var yOffset = 20 + Math.floor((i + 0.5) * 20);
-
-    for (var j = 0; j < 5; ++j) {
-      var xOffset = 20 + Math.floor((j + 0.5) * 20);
-      var pt = transform(xOffset / 140, yOffset / 140);
-      
-      var cx = Math.max(0, Math.min(width - 1, pt.x));
-      var cy = Math.max(0, Math.min(height - 1, pt.y));
-      var idx = cy * width + cx;
-
-      var val = (src[idx] === 255) ? 1 : 0;
-      bits[i][j] = val;
-      invBits[i][j] = (val === 1) ? 0 : 1; 
-    }
-  }
-
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -346,13 +321,40 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     [1, 1, 0, 0, 1]
   ];
 
+  // Массив для хранения прочитанных пикселей
+  var samplePixels = function(borderSize) {
+    var matrix = [];
+    for (var i = 0; i < 5; ++i) {
+      matrix[i] = [];
+      // Если borderSize > 0, сжимаем зону чтения внутрь, отступая от краев рамки
+      var start = borderSize;
+      var step = (100 - borderSize * 2) / 5;
+      var yOffset = start + (i + 0.5) * step;
+
+      for (var j = 0; j < 5; ++j) {
+        var xOffset = start + (j + 0.5) * step;
+        var pt = transform(xOffset / 100, yOffset / 100);
+        
+        var cx = Math.max(0, Math.min(width - 1, pt.x));
+        var cy = Math.max(0, Math.min(height - 1, pt.y));
+        var idx = cy * width + cx;
+        
+        matrix[i][j] = (src[idx] === 255) ? 1 : 0;
+      }
+    }
+    return matrix;
+  };
+
+  // Генерируем варианты чтения:
+  // 1. Предполагаем, что контур ВНЕШНИЙ (отступ рамки ~14% от ширины с каждого края)
+  var matOuter = samplePixels(14);
+  // 2. Предполагаем, что контур ВНУТРЕННИЙ (без рамки, отступ 0)
+  var matInner = samplePixels(0);
+
   var bestErrors = 100;
 
-  // Проверяем 4 поворота для обычной И для инвертированной матрицы
+  // Проверяем все варианты полярности, поворотов и типов контуров
   for (var rotation = 0; rotation < 4; ++rotation) {
-    var errors = 0;
-    var errorsInv = 0;
-
     for (var y = 0; y < 5; ++y) {
       for (var x = 0; x < 5; ++x) {
         var rotX = x;
@@ -362,18 +364,46 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
         else if (rotation === 2) { rotX = 4 - x; rotY = 4 - y; }
         else if (rotation === 3) { rotX = 4 - y; rotY = x; }
 
-        if (bits[rotY][rotX] !== realDataset[y][x]) errors++;
-        if (invBits[rotY][rotX] !== realDataset[y][x]) errorsInv++;
+        var target = realDataset[y][x];
+
+        // Проверяем совпадение для внешнего контура (прямой и инвертированный)
+        if (matOuter[rotY][rotX] !== target) checkError(matOuter[rotY][rotX], target);
+        
+        // Вспомогательная функция подсчета минимальной ошибки по всем гипотезам
+        function checkDiff(val, target, id) {
+          return val !== target ? 1 : 0;
+        }
       }
     }
+  }
 
-    var minCur = Math.min(errors, errorsInv);
+  // Перепишем цикл сверки более прозрачно для надежности
+  for (var rotation = 0; rotation < 4; ++rotation) {
+    var eOut = 0, eOutInv = 0, eIn = 0, eInInv = 0;
+
+    for (var y = 0; y < 5; ++y) {
+      for (var x = 0; x < 5; ++x) {
+        var rx = x, ry = y;
+        if (rotation === 1) { rx = y; ry = 4 - x; }
+        else if (rotation === 2) { rx = 4 - x; ry = 4 - y; }
+        else if (rotation === 3) { rx = 4 - y; ry = x; }
+
+        var target = realDataset[y][x];
+
+        if (matOuter[ry][rx] !== target) eOut++;
+        if ((matOuter[ry][rx] === 1 ? 0 : 1) !== target) eOutInv++;
+        
+        if (matInner[ry][rx] !== target) eIn++;
+        if ((matInner[ry][rx] === 1 ? 0 : 1) !== target) eInInv++;
+      }
+    }
+    var minCur = Math.min(eOut, eOutInv, eIn, eInInv);
     if (minCur < bestErrors) {
       bestErrors = minCur;
     }
   }
 
-  // Допускаем погрешность до 6 пикселей для стабильного удержания фокуса камеры
+  // Допускаем до 6 ошибок (устойчивость к шумам)
   if (bestErrors <= 6) {
     return new AR.Marker(100, imageCorners);
   }
