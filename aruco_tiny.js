@@ -276,24 +276,21 @@ AR.Detector.prototype.isConvex = function(contour){
 // Финальная версия с двойной проверкой полярности (инверсии) пикселей
 // Универсальная версия: проверяет контур и как внешний (с рамкой), и как внутренний (без рамки)
 // Полностью исправленная senior-версия getMarker по аудиту конвейера
+// Финальная адаптивная версия 7х7 для Piet-AR 5x5
 AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var width = imageThres.width;
   var height = imageThres.height;
   var src = imageThres.data;
 
-  // Математически точное вычисление матрицы гомографии без преждевременных округлений
   function getPerspectiveTransform(srcPts, dstSize) {
     var x0 = srcPts[0].x, y0 = srcPts[0].y;
     var x1 = srcPts[1].x, y1 = srcPts[1].y;
     var x2 = srcPts[2].x, y2 = srcPts[2].y;
     var x3 = srcPts[3].x, y3 = srcPts[3].y;
-
     var dx1 = x1 - x2, dy1 = y1 - y2;
     var dx2 = x3 - x2, dy2 = y3 - y2;
     var dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
-    
     var a11, a12, a13, a21, a22, a23, a31, a32;
-    
     if (dx3 === 0 && dy3 === 0) {
       a11 = x1 - x0; a12 = x2 - x1; a13 = x0;
       a21 = y1 - y0; a22 = y2 - y1; a23 = y0;
@@ -303,64 +300,59 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
       if (gDen === 0) return null;
       a31 = (dx3 * dy2 - dx2 * dy3) / gDen;
       a32 = (dx1 * dy3 - dx3 * dy1) / gDen;
-      
-      a11 = x1 - x0 + a31 * x1;
-      a12 = x3 - x0 + a32 * x3;
-      a13 = x0;
-      a21 = y1 - y0 + a31 * y1;
-      a22 = y3 - y0 + a32 * y3;
-      a23 = y0;
+      a11 = x1 - x0 + a31 * x1; a12 = x3 - x0 + a32 * x3; a13 = x0;
+      a21 = y1 - y0 + a31 * y1; a22 = y3 - y0 + a32 * y3; a23 = y0;
     }
-    
-    // Возвращаем точные float-координаты
     return function(px, py) {
       var den = a31 * px + a32 * py + 1;
       if (den === 0) return { x: 0, y: 0 };
-      return {
-        x: (a11 * px + a12 * py + a13) / den,
-        y: (a21 * px + a22 * py + a23) / den
-      };
+      return { x: (a11 * px + a12 * py + a13) / den, y: (a21 * px + a22 * py + a23) / den };
     };
   }
 
-  // Строим проектор на сетку 140x140
-  var transform = getPerspectiveTransform(imageCorners, 140);
+  // Проецируем весь четырехугольник на общую сетку 7х7 (размер 70х70 пикселей)
+  var transform = getPerspectiveTransform(imageCorners, 70);
   if (!transform) return null;
   
-  var bits = [];
-  var invBits = [];
+  var fullMatrix = [];
+  var fullMatrixInv = [];
 
-  for (var i = 0; i < 5; ++i) {
-    bits[i] = new Array(5);
-    invBits[i] = new Array(5);
-    
-    // Внешняя рамка занимает по 20 условных пикселей с краев. 
-    // Шаг внутренней ячейки равен 20 пикселям. Сэмплируем строго из центров ячеек.
-    var yOffset = 20 + (i + 0.5) * 20;
+  // Считываем ПОЛНУЮ матрицу 7х7, включая рамку
+  for (var i = 0; i < 7; ++i) {
+    fullMatrix[i] = [];
+    fullMatrixInv[i] = [];
+    var yOffset = (i + 0.5) * 10; // Шаг ячейки — 10 единиц
 
-    for (var j = 0; j < 5; ++j) {
-      var xOffset = 20 + (j + 0.5) * 20;
-      
-      // ИСПРАВЛЕНО: Передаем чистые координаты без деления на 140!
+    for (var j = 0; j < 7; ++j) {
+      var xOffset = (j + 0.5) * 10;
       var pt = transform(xOffset, yOffset);
       
-      // Округляем координаты строго в самый последний момент перед обращением к массиву
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
-      
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
       
       var idx = cy * width + cx;
-
-      // ИСПРАВЛЕНО: Заменили жесткое "=== 255" на порог "> 127" для защиты от шумов
       var val = (src[idx] > 127) ? 1 : 0;
-      bits[i][j] = val;
-      invBits[i][j] = (val === 1) ? 0 : 1; 
+      
+      fullMatrix[i][j] = val;
+      fullMatrixInv[i][j] = (val === 1) ? 0 : 1;
     }
   }
 
-  // Эталонный датасет Piet-AR
+  // Извлекаем центральное ядро 5х5 (отсекаем индекс 0 и индекс 6)
+  var bits = [];
+  var invBits = [];
+  for (var i = 0; i < 5; ++i) {
+    bits[i] = [];
+    invBits[i] = [];
+    for (var j = 0; j < 5; ++j) {
+      bits[i][j] = fullMatrix[i + 1][j + 1];
+      invBits[i][j] = fullMatrixInv[i + 1][j + 1];
+    }
+  }
+
+  // Наш эталон данных Piet-AR
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -371,7 +363,6 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
 
   var bestErrors = 100;
 
-  // Анализируем 4 возможных разворота кадра
   for (var rotation = 0; rotation < 4; ++rotation) {
     var eOut = 0, eOutInv = 0;
 
@@ -395,8 +386,8 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
     }
   }
 
-  // Порог удержания ошибок ставим на 5 для чистой фильтрации ложных четырехугольников
-  if (bestErrors <= 5) {
+  // Допускаем до 6 ошибок (высокая устойчивость к ракурсам)
+  if (bestErrors <= 6) {
     return new AR.Marker(100, imageCorners);
   }
 
