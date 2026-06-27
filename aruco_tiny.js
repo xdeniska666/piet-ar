@@ -276,22 +276,51 @@ AR.Detector.prototype.isConvex = function(contour){
 // Глобальный буфер для вывода матрицы на экран дебага
 window.lastReadMatrix = null;
 
-AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
+AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var width = imageThres.width;
   var height = imageThres.height;
   var src = imageThres.data;
 
-  // Прямая интерполяция координат внутри четырехугольника (без гомографии)
-  function getPointInQuad(corners, perX, perY) {
-    // Интерполируем верхнюю грань (между углами 0 и 1)
-    var topX = corners[0].x + (corners[1].x - corners[0].x) * perX;
-    var topY = corners[0].y + (corners[1].y - corners[0].y) * perX;
+  var corners = [];
+
+  // Абсолютная защита: перебираем все возможные форматы хранения координат в ArUco
+  try {
+    if (candidate && candidate.corners && candidate.corners[0]) {
+      corners = candidate.corners;
+    } else if (candidate && candidate[0] && typeof candidate[0].x === 'number') {
+      corners = candidate;
+    } else if (candidate && typeof candidate[0] === 'number') {
+      corners = [
+        { x: candidate[0], y: candidate[1] },
+        { x: candidate[2], y: candidate[3] },
+        { x: candidate[4], y: candidate[5] },
+        { x: candidate[6], y: candidate[7] }
+      ];
+    } else if (candidate && candidate.points && candidate.points[0]) {
+      corners = candidate.points;
+    }
+  } catch (e) {
+    window.lastReadMatrix = null;
+    return null;
+  }
+
+  // Если структура не распознана, пишем ошибку в буфер дебага вместо null
+  if (!corners || corners.length < 4 || !corners[0]) {
+    // Создаем пустую фейковую матрицу, чтобы на экране вместо "Нет данных" вывелся пустой квадрат
+    window.lastReadMatrix = [
+      [0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]
+    ];
+    return null;
+  }
+
+  // Билинейная интерполяция координат внутри четырехугольника
+  function getPointInQuad(c, perX, perY) {
+    var topX = c[0].x + (c[1].x - c[0].x) * perX;
+    var topY = c[0].y + (c[1].y - c[0].y) * perX;
     
-    // Интерполируем нижнюю грань (между углами 3 и 2)
-    var botX = corners[3].x + (corners[2].x - corners[3].x) * perX;
-    var botY = corners[3].y + (corners[2].y - corners[3].y) * perX;
+    var botX = c[3].x + (c[2].x - c[3].x) * perX;
+    var botY = c[3].y + (c[2].y - c[3].y) * perX;
     
-    // Финальная вертикальная интерполяция между полученными точками
     return {
       x: topX + (botX - topX) * perY,
       y: topY + (botY - topY) * perY
@@ -299,18 +328,13 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   }
 
   var fullMatrix = [];
-  var fullMatrixInv = [];
-
-  // Строим сетку 7x7, включая внешнюю рамку маркера
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
-    fullMatrixInv[i] = [];
     var yPercent = (i + 0.5) / 7;
 
     for (var j = 0; j < 7; ++j) {
       var xPercent = (j + 0.5) / 7;
-      
-      var pt = getPointInQuad(imageCorners, xPercent, yPercent);
+      var pt = getPointInQuad(corners, xPercent, yPercent);
       
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
@@ -319,26 +343,20 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
       cy = Math.max(0, Math.min(height - 1, cy));
       
       var idx = cy * width + cx;
-      var val = (src[idx] > 127) ? 1 : 0;
-      
-      fullMatrix[i][j] = val;
-      fullMatrixInv[i][j] = (val === 1) ? 0 : 1;
+      fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
     }
   }
 
-  // Вырезаем центральное ядро Piet-AR 5x5 (отсекаем рамку безопасности)
+  // Вырезаем центральную кодовую зону Piet-AR 5x5
   var bits = [];
-  var invBits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
-    invBits[i] = [];
     for (var j = 0; j < 5; ++j) {
       bits[i][j] = fullMatrix[i + 1][j + 1];
-      invBits[i][j] = fullMatrixInv[i + 1][j + 1];
     }
   }
 
-  // ЖЕЛЕЗОБЕТОННО: Сохраняем результат в буфер ДО любых проверок на ошибки
+  // Записываем результат в буфер дебага для отображения в index.html
   window.lastReadMatrix = bits;
 
   var realDataset = [
@@ -352,32 +370,26 @@ AR.Detector.prototype.getMarker = function(imageThres, imageCorners) {
   var bestErrors = 100;
 
   for (var rotation = 0; rotation < 4; ++rotation) {
-    var eOut = 0, eOutInv = 0;
-
+    var eOut = 0;
     for (var y = 0; y < 5; ++y) {
       for (var x = 0; x < 5; ++x) {
         var rx = x, ry = y;
         if (rotation === 1) { rx = y; ry = 4 - x; }
         else if (rotation === 2) { rx = 4 - x; ry = 4 - y; }
-        else if (rotation === 3) { rx = 4 - y; rx = x; } // Исправлен индекс поворота
+        else if (rotation === 3) { rx = 4 - y; ry = x; }
 
-        var target = realDataset[y][x];
-
-        if (bits[ry][rx] !== target) eOut++;
-        if (invBits[ry][rx] !== target) eOutInv++;
+        if (bits[ry][rx] !== realDataset[y][x]) eOut++;
       }
     }
-    
-    var minCur = Math.min(eOut, eOutInv);
-    if (minCur < bestErrors) {
-      bestErrors = minCur;
+    if (eOut < bestErrors) {
+      bestErrors = eOut;
     }
   }
 
-  // Порог фильтрации шумов кадра
+  // Допускаем до 6 ошибок на узор
   if (bestErrors <= 6) {
-    return new AR.Marker(100, imageCorners);
+    return new AR.Marker(100, corners);
   }
 
   return null;
-};  
+};
