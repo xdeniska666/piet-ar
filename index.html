@@ -499,12 +499,10 @@
 
                     const matrixDebug = document.getElementById('matrixDebug');
                     if (!window.lastReadMatrix) {
-                        // Если функция детектора молчит, выведем сырую информацию о первом кандидате
-                        if (detector.candidates && detector.candidates.length > 0) {
-                            let firstCand = detector.candidates[0];
-                            matrixDebug.innerHTML = `<span style='color:#ff9900'>Есть кандидаты (${detector.candidates.length}), но getMarker их отбрасывает.\nСтруктура: ${typeof firstCand}\nКлючи: ${Object.keys(firstCand || {}).join(', ')}</span>`;
+                        if (window.debugCandidateInfo) {
+                            matrixDebug.innerHTML = `<span style='color:#ff9900; font-size:12px;'>${window.debugCandidateInfo}</span>`;
                         } else {
-                            matrixDebug.innerHTML = "<span style='color:#ff3838'>Нет данных контура (Геометрия пуста)</span>";
+                            matrixDebug.innerHTML = "<span style='color:#ff3838'>Нет данных контура</span>";
                         }
                     } else {
                         let htmlGrid = "";

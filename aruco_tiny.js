@@ -281,9 +281,25 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var height = imageThres.height;
   var src = imageThres.data;
 
+  // ХАК ДЛЯ ТЕЛЕМЕТРИИ: Перехватываем структуру до очистки памяти
+  try {
+    if (candidate) {
+      var keys = Object.keys(candidate).join(', ');
+      var sample = "";
+      if (candidate[0]) sample = " | [0]: " + Object.keys(candidate[0]).join(', ');
+      if (candidate.corners && candidate.corners[0]) sample = " | .corners[0]: " + Object.keys(candidate.corners[0]).join(', ');
+      
+      window.debugCandidateInfo = "Тип: " + (Array.isArray(candidate) ? "Массив" : typeof candidate) + " | Ключи: " + keys + sample;
+    } else {
+      window.debugCandidateInfo = "Кандидат пришел null";
+    }
+  } catch(e) {
+    window.debugCandidateInfo = "Ошибка структуры: " + e.message;
+  }
+
   var corners = [];
 
-  // Абсолютная защита: перебираем все возможные форматы хранения координат в ArUco
+  // Парсинг углов с автоматическим определением формата
   try {
     if (candidate && candidate.corners && candidate.corners[0]) {
       corners = candidate.corners;
@@ -300,27 +316,19 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       corners = candidate.points;
     }
   } catch (e) {
-    window.lastReadMatrix = null;
     return null;
   }
 
-  // Если структура не распознана, пишем ошибку в буфер дебага вместо null
   if (!corners || corners.length < 4 || !corners[0]) {
-    // Создаем пустую фейковую матрицу, чтобы на экране вместо "Нет данных" вывелся пустой квадрат
-    window.lastReadMatrix = [
-      [0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]
-    ];
     return null;
   }
 
-  // Билинейная интерполяция координат внутри четырехугольника
+  // Билинейная интерполяция
   function getPointInQuad(c, perX, perY) {
     var topX = c[0].x + (c[1].x - c[0].x) * perX;
     var topY = c[0].y + (c[1].y - c[0].y) * perX;
-    
     var botX = c[3].x + (c[2].x - c[3].x) * perX;
     var botY = c[3].y + (c[2].y - c[3].y) * perX;
-    
     return {
       x: topX + (botX - topX) * perY,
       y: topY + (botY - topY) * perY
@@ -331,23 +339,18 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
     var yPercent = (i + 0.5) / 7;
-
     for (var j = 0; j < 7; ++j) {
       var xPercent = (j + 0.5) / 7;
       var pt = getPointInQuad(corners, xPercent, yPercent);
-      
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
-      
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
-      
       var idx = cy * width + cx;
       fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
     }
   }
 
-  // Вырезаем центральную кодовую зону Piet-AR 5x5
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
@@ -356,7 +359,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Записываем результат в буфер дебага для отображения в index.html
   window.lastReadMatrix = bits;
 
   var realDataset = [
@@ -368,7 +370,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   ];
 
   var bestErrors = 100;
-
   for (var rotation = 0; rotation < 4; ++rotation) {
     var eOut = 0;
     for (var y = 0; y < 5; ++y) {
@@ -377,19 +378,14 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         if (rotation === 1) { rx = y; ry = 4 - x; }
         else if (rotation === 2) { rx = 4 - x; ry = 4 - y; }
         else if (rotation === 3) { rx = 4 - y; ry = x; }
-
         if (bits[ry][rx] !== realDataset[y][x]) eOut++;
       }
     }
-    if (eOut < bestErrors) {
-      bestErrors = eOut;
-    }
+    if (eOut < bestErrors) bestErrors = eOut;
   }
 
-  // Допускаем до 6 ошибок на узор
   if (bestErrors <= 6) {
     return new AR.Marker(100, corners);
   }
-
   return null;
 };
