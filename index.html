@@ -364,13 +364,18 @@
         });
 
         function processLoop() {
-            if (isFrozen) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA && !isFrozen) {
+
+                // 1. Сначала железно сбрасываем старую матрицу перед новым анализом
+                window.lastReadMatrix = null;
             
-            if (video.videoWidth && video.videoHeight) { 
-                if (canvas.width !== 240 || canvas.height !== 320) {
-                    canvas.width = 240;
-                    canvas.height = 320;
-                }
+                // 2. Затем проверяем и держим жесткие размеры холста 240х320
+                if (video.videoWidth && video.videoHeight) { 
+                    if (canvas.width !== 240 || canvas.height !== 320) {
+                        canvas.width = 240;
+                        canvas.height = 320;
+                    }
+                }    
                 
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const currentImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);

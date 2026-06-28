@@ -239,7 +239,7 @@ AR.Detector.prototype.detect = function(imageSrc){
   
   // Записываем реальное количество выживших кандидатов для нашей телеметрии
   window.realCandidatesCount = this.candidates.length;
-  
+
   // Разбор кандидатов в маркеры
   var markers = [];
   for (i = 0; i < this.candidates.length; ++ i){
@@ -362,8 +362,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  window.lastReadMatrix = bits;
-
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -387,7 +385,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     if (eOut < bestErrors) bestErrors = eOut;
   }
 
+  // Если маркер валидный, то фиксируем матрицу и возвращаем объект
   if (bestErrors <= 6) {
+    window.lastReadMatrix = bits;
     return new AR.Marker(100, corners);
   }
   return null;
