@@ -280,9 +280,12 @@ AR.Detector.prototype.isConvex = function(contour){
 window.lastReadMatrix = null;
 
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
-  var width = imageThres.width;
-  var height = imageThres.height;
-  var src = imageThres.data;
+  var img = imageThres || this.thres;
+  if (!img || !img.data) return null;
+
+  var width = img.width;
+  var height = img.height;
+  var src = img.data;
 
   // ХАК ДЛЯ ТЕЛЕМЕТРИИ: Перехватываем структуру до очистки памяти
   try {
