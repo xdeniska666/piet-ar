@@ -197,11 +197,14 @@ AR.Marker = function(id, corners){
 };
 
 AR.Detector = function(){
-  this.grey = new CV.Image();
   this.thres = new CV.Image();
-  /*this.homography = new CV.Image();*/
-  this.contours = [];
+  this.contour = [];
+  this.poly = [];
+  this.candidate = [];
   this.candidates = [];
+
+  // Жестко снижаем порог фильтрации по размеру для низкого разрешения кадра
+  this.minSize = 5; // Было значительно больше, из-за чего отсекались маркеры
 };
 
 AR.Detector.prototype.detect = function(imageSrc){
