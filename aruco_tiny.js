@@ -197,6 +197,7 @@ AR.Marker = function(id, corners){
 };
 
 AR.Detector = function(){
+  this.grey = new CV.Image();
   this.thres = new CV.Image();
   this.contour = [];
   this.poly = [];
@@ -204,10 +205,13 @@ AR.Detector = function(){
   this.candidates = [];
 
   // Жестко снижаем порог фильтрации по размеру для низкого разрешения кадра
-  this.minSize = 5; // Было значительно больше, из-за чего отсекались маркеры
+  this.minSize = 10; // Было значительно больше, из-за чего отсекались маркеры
 };
 
 AR.Detector.prototype.detect = function(imageSrc){
+  // Защита от пустых данных
+  if (!imageSrc || !imageSrc.data) return [];
+
   CV.grayscale(imageSrc, this.grey);
   // Адаптивный порог под мелкое разрешение
   CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
@@ -221,8 +225,8 @@ AR.Detector.prototype.detect = function(imageSrc){
   for (; i < len; ++ i){
     contour = this.contours[i];
 
-    // Отрезанный лимит площади маркера (не менее 5% от ширины)
-    if (contour.length > imageSrc.width * 0.15){
+    // Ограничение по длине контура для исключения мелкого шума
+    if (contour.length > 20){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
@@ -235,7 +239,7 @@ AR.Detector.prototype.detect = function(imageSrc){
             var dist = dx * dx + dy * dy;
             if (dist < minDist) minDist = dist;
           }  
-          if (minDist > 100){
+          if (minDist > 30){
             this.candidates.push(approx);
           }
         }

@@ -204,24 +204,6 @@
                 };
             }
         }
-        
-        // МОДИФИКАЦИЯ МЕТОДА ДЕТЕКЦИИ НА ХОДУ (Исправление конвейера данных)
-        if (detector && detector.detect) {
-            const originalDetect = detector.detect;
-            detector.detect = function(image) {
-                // Вызываем базовый метод, чтобы отработал встроенный пороговый фильтр
-                const res = originalDetect.call(this, image);
-
-                // Если после этого сырые контуры остались по нулям, принудительно 
-                // перезапускаем поиск контуров напрямую из thres в обход внутренних ограничений
-                if (telemetryData.rawContoursCount === 0 && this.thres && this.thres.data) {
-                    this.contours = [];
-                    CV.findContours(this.thres, this.contours);
-                    telemetryData.filteredContoursCount = this.contours.length;
-                }
-                return res;
-            };        
-        }
             
         const constraints = {
             video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
