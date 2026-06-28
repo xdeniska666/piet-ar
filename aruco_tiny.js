@@ -225,27 +225,20 @@ AR.Detector.prototype.detect = function(imageSrc){
   for (; i < len; ++ i){
     contour = this.contours[i];
 
-    // Ограничение по длине контура для исключения мелкого шума
-    if (contour.length > 20){
+    // Ослабляем фильтр: пропускаем даже небольшие контуры
+    if (contour.length > 10){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
       if (approx.length === 4){
-        if (this.isConvex(approx)){
-          var minDist = 999999;
-          for (var j = 0; j < 4; ++ j){
-            var dx = approx[j].x - approx[(j + 1) % 4].x;
-            var dy = approx[j].y - approx[(j + 1) % 4].y;
-            var dist = dx * dx + dy * dy;
-            if (dist < minDist) minDist = dist;
-          }  
-          if (minDist > 30){
-            this.candidates.push(approx);
-          }
-        }
+          // Убираем проверку на выпуклость и лимиты площади, пушим всё подряд
+          this.candidates.push(approx);
       }
     }
   }
+  
+  // Записываем реальное количество выживших кандидатов для нашей телеметрии
+  window.realCandidatesCount = this.candidates.length;
   
   // Разбор кандидатов в маркеры
   var markers = [];
