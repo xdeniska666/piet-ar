@@ -466,16 +466,11 @@
 
         function analyzeFrame(imageData) {
             try {
-                // Сброс счетчиков текущего кадра перед детекцией
-                telemetryData.approxPolyCalls = 0;
-                telemetryData.quadCandidates = 0;
-
+                // Просто вызываем твой рабочий детектор
                 const markers = detector.detect(imageData) || [];
-                const mode = selectView.value;
 
+                // Вывод количества сырых контуров и кандидатов из твоего скрипта
                 const rawCount = (detector && detector.contours) ? detector.contours.length : 0;
-
-                telemetryData.filteredContoursCount = window.realCandidatesCount || 0;
 
                 // Генерация лога телеметрии
                 geoLog.innerHTML = `
@@ -550,8 +545,10 @@
                             ctx.stroke();
                         });
                     } else {
-                        statusText.innerText = isFrozen ? "Заморожено." : "Сканирование...";
-                    }
+                        if (mode !== "contours") {
+                            statusText.innerText = isFrozen ? "Заморожено." : "Сканирование...";
+                        }
+                    }    
 
                     const matrixDebug = document.getElementById('matrixDebug');
                     if (!window.lastReadMatrix) {
