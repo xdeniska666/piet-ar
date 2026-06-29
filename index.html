@@ -391,41 +391,53 @@
             // Получаем чистые пиксели кадра
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+            let markers = [];
+            try {
+                markers = detector.detect(imageData) || [];
+            } catch (err) {
+                const geoLog = document.getElementById('geoLog');
+                if (geoLog) geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА ЯДРА: ${err.message}</span>`;
+            }        
+
             // 2. Логика визуального режима отображения
             if (currentMode === 'thresh') {
-                const greyImg = new CV.Image(canvas.width, canvas.height);
-                const threshImg = new CV.Image(canvas.width, canvas.height);
-                CV.grayscale(imageData, greyImg);
-                CV.adaptiveThreshold(greyImg, threshImg, 7, 7);
-
-                // Отрисовка черно-белого превью на экран
-                const dst = imageData.data;
-                for (let i = 0; i < threshImg.data.length; ++i) {
-                    const val = threshImg.data[i];
-                    dst[i * 4] = val; dst[i * 4 + 1] = val; dst[i * 4 + 2] = val;
-                }
-                ctx.putImageData(imageData, 0, 0);
+                // Отрисовка черно-белого превью напрямую из посчитанного адаптивного порога ядра
+                if (detector.thres && detector.thres.data) {
+                    const imgData = ctx.createImageData(canvas.width, canvas.height);
+                    const dst = imgData.data;
+                    const src = detector.thres.data;
+                    let j = 0;
+                    for (let i = 0; i < src.length; ++i) {
+                        let val = src[i];
+                        dst[j] = val;
+                        dst[j+1] = val;
+                        dst[j+2] = val;
+                        dst[j+3] = 255;
+                        j += 4;
+                    }    
+                    ctx.putImageData(imageData, 0, 0);
+                }    
             } else if (currentMode === 'contours') {
+                // Режим отрисовки чистой сетки линий
                 ctx.fillStyle = "#000";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.strokeStyle = "#00f3ff";
                 ctx.lineWidth = 1;
                 
                 const rawContours = detector.contours || [];
-                if (rawContours.length > 0) {
-                    rawContours.forEach(c => {
-                        if (c && c.length >= 2) {
-                            ctx.beginPath();
-                            ctx.moveTo(c[0].x, c[0].y);
-                            for(let i = 1; i < c.length; i++) {
-                                ctx.lineTo(c[i].x, c[i].y);
-                            }
-                            ctx.closePath();
-                            ctx.stroke();
+                rawContours.forEach(c => {
+                    if (c && c.length >= 2) {
+                        ctx.beginPath();
+                        ctx.moveTo(c[0].x, c[0].y);
+                        for(let i = 1; i < c.length; i++) {
+                            ctx.lineTo(c[i].x, c[i].y);
                         }
-                    });
-                }                
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
+                });                
             } else {
+                // Режим Оригинал: рисуем оранжевые контуры кандидатов поверх видео
                 if (detector.candidates) {
                     ctx.strokeStyle = "orange";
                     ctx.lineWidth = 2;
@@ -439,28 +451,25 @@
                 }        
             }
             
-            // 3. Запуск детектора ядра Piet-AR
-            try {
-                const markers = detector.detect(imageData) || [];
+            // 3. Подсветка найденных маркеров зеленой рамкой
+            if (markers.length > 0) {
+                statusText.innerText = `🎉 ID: ${markers[0].id}`;
+                ctx.strokeStyle = "#00ff87";
+                ctx.lineWidth = 4;
+                markers.forEach(m => {
+                    ctx.beginPath();
+                    ctx.moveTo(m.corners[0].x, m.corners[0].y);
+                    for (let i = 1; i < 4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
+                    ctx.closePath();
+                    ctx.stroke();
+                });
+            } else {
+                statusText.innerText = isFrozen ? "Заморожено." : "Сканирование...";
+            }
 
-                // Подсветка найденных маркеров зеленой рамкой
-                if (markers.length > 0) {
-                    statusText.innerText = `🎉 ID: ${markers[0].id}`;
-                    ctx.strokeStyle = "#00ff87";
-                    ctx.lineWidth = 4;
-                    markers.forEach(m => {
-                        ctx.beginPath();
-                        ctx.moveTo(m.corners[0].x, m.corners[0].y);
-                        for (let i = 1; i < 4; i++) ctx.lineTo(m.corners[i].x, m.corners[i].y);
-                        ctx.closePath();
-                        ctx.stroke();
-                    });
-                } else {
-                    statusText.innerText = isFrozen ? "Заморожено." : "Сканирование...";
-                }
-
-                // 4. Отрисовка матрицы сканирования
-                const matrixDebug = document.getElementById('matrixDebug');
+            // 4. Отрисовка матрицы сканирования
+            const matrixDebug = document.getElementById('matrixDebug');
+            if (matrixDebug) {
                 if (!window.lastReadMatrix) {
                     if (window.debugCandidateInfo) {
                         matrixDebug.innerHTML = `<span style='color:#ff9900; font-size:12px;'>${window.debugCandidateInfo}</span>`;
@@ -477,21 +486,27 @@
                     }
                     matrixDebug.innerHTML = htmlGrid;
                 }
+            }    
+            
+            // 5. Вывод счетчиков телеметрии
+            const geoLog = document.getElementById('geoLog');
+            if (geoLog) {
+                const rawContoursCount = detector.contours ? detector.contours.length : 0;
+                const candidatesCount = detector.candidates ? detector.candidates.length : 0;
+                const recognizedCount = markers.length;
 
-                // 5. Вывод счетчиков телеметрии
                 geoLog.innerHTML = `
-                    <div style="display:flex; justify-content:space-between;"><span>Сырые контуры (findContours):</span><span style="color:#fff; font-weight:bold;">${detector.contours ? detector.contours.length : 0}</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Кандидаты внутри ядра:</span><span style="color:#ffaa00; font-weight:bold;">${window.realCandidatesCount || 0}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Сырые контуры (findContours):</span><span style="color:#fff; font-weight:bold;">${rawContoursCount}</span></div>
+                    <div style="display:flex; justify-content:space-between; color:#ffaa00;"><span>Кандидаты внутри ядра:</span><span style="font-weight:bold;">${candidatesCount}</span></div>
+            <       div style="display:flex; justify-content:space-between; color:#00ff87;"><span>Распознано маркеров:</span><span style="font-weight:bold;">${recognizedCount}</span></div>
                 `;
-
-            } catch (err) {
-                geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА ДЕТЕКЦИИ: ${err.message}</span>`;
             }
 
             // 6. Расчет FPS
             frameCount++;
             const now = performance.now();
             if (now >= lastTime + 1000) {
+                const telFps = document.getElementById('telFps');
                 telFps.innerText = `${Math.round((frameCount * 1000) / (now - lastTime))} FPS`;
                 frameCount = 0;
                 lastTime = now;
