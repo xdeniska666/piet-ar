@@ -364,12 +364,14 @@
         });
 
         function processLoop() {
-            // Мгновенный перезапуск цикла, чтобы камера никогда не висла
-            if (!isFrozen) {
-                requestAnimationFrame(processLoop);
-            }
+            // Перезапуск цикла выносим наверх без условий, чтобы FPS и дебаг не застывали в ноль
+            requestAnimationFrame(processLoop);
 
             if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+            // Безопасно получаем текущий режим из селектора прямо здесь
+            const modeSelect = document.getElementById('selectView');
+            const currentMode = modeSelect ? modeSelect.value : 'original';
 
             // Жестко держим размеры холста 240х320
             if (video.videoWidth && video.videoHeight) {
@@ -379,12 +381,12 @@
                 }
             }
 
-            // Очищаем отладочные переменные перед анализом нового кадра
-            window.lastReadMatrix = null;
-            window.debugCandidateInfo = "";
-
-            // 1. Отрисовка кадра с камеры на холст
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Отрисовка кадра с учетом заморозки
+            if (!isFrozen) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            } else if (typeof frozenImageData !== 'undefined' && frozenImageData) {
+                ctx.putImageData(frozenImageData, 0, 0);
+            }
 
             // Получаем чистые пиксели кадра
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -403,8 +405,40 @@
                     dst[i * 4] = val; dst[i * 4 + 1] = val; dst[i * 4 + 2] = val;
                 }
                 ctx.putImageData(imageData, 0, 0);
+            } else if (currentMode === 'contours') {
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = "#00f3ff";
+                ctx.lineWidth = 1;
+                
+                const rawContours = detector.contours || [];
+                if (rawContours.length > 0) {
+                    rawContours.forEach(c => {
+                        if (c && c.length >= 2) {
+                            ctx.beginPath();
+                            ctx.moveTo(c[0].x, c[0].y);
+                            for(let i = 1; i < c.length; i++) {
+                                ctx.lineTo(c[i].x, c[i].y);
+                            }
+                            ctx.closePath();
+                            ctx.stroke();
+                        }
+                    });
+                }                
+            } else {
+                if (detector.candidates) {
+                    ctx.strokeStyle = "orange";
+                    ctx.lineWidth = 2;
+                    detector.candidates.forEach(p => {
+                        ctx.beginPath();
+                        ctx.moveTo(p[0].x, p[0].y);
+                        for(let i=1; i<4; i++) ctx.lineTo(p[i].x, p[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                }        
             }
-
+            
             // 3. Запуск детектора ядра Piet-AR
             try {
                 const markers = detector.detect(imageData) || [];
@@ -466,6 +500,10 @@
 
         function analyzeFrame(imageData) {
             try {
+                // Проверяем селектор режима отображения
+                const modeSelect = document.getElementById('selectView');
+                const mode = modeSelect ? modeSelect.value : "original";
+
                 // Просто вызываем твой рабочий детектор
                 const markers = detector.detect(imageData) || [];
 
