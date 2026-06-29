@@ -388,6 +388,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   if (bestErrors <= 6) {
+    window.lastReadMatrix = bits;
     return new AR.Marker(100, corners);
   }
   return null;

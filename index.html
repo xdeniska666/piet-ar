@@ -370,8 +370,7 @@
             if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
             // Безопасно получаем текущий режим из селектора прямо здесь
-            const modeSelect = document.getElementById('selectView');
-            const currentMode = modeSelect ? modeSelect.value : 'original';
+            const currentMode = selectView ? selectView.value : 'normal';
 
             // Жестко держим размеры холста 240х320
             if (video.videoWidth && video.videoHeight) {
@@ -395,7 +394,6 @@
             try {
                 markers = detector.detect(imageData) || [];
             } catch (err) {
-                const geoLog = document.getElementById('geoLog');
                 if (geoLog) geoLog.innerHTML = `<span style='color:#ff3838; font-weight:bold;'>💥 ОШИБКА ЯДРА: ${err.message}</span>`;
             }        
 
@@ -415,7 +413,7 @@
                         dst[j+3] = 255;
                         j += 4;
                     }    
-                    ctx.putImageData(imageData, 0, 0);
+                    ctx.putImageData(imgData, 0, 0);
                 }    
             } else if (currentMode === 'contours') {
                 // Режим отрисовки чистой сетки линий
@@ -472,7 +470,7 @@
             if (matrixDebug) {
                 if (!window.lastReadMatrix) {
                     if (window.debugCandidateInfo) {
-                        matrixDebug.innerHTML = `<span style='color:#ff9900; font-size:12px;'>${window.debugCandidateInfo}</span>`;
+                        matrixDebug.innerHTML = `<span style='color:#ff9900; font-size:11px;'>${window.debugCandidateInfo}</span>`;
                     } else {
                         matrixDebug.innerHTML = "<span style='color:#ff3838'>Нет данных контура</span>";
                     }
@@ -489,7 +487,6 @@
             }    
             
             // 5. Вывод счетчиков телеметрии
-            const geoLog = document.getElementById('geoLog');
             if (geoLog) {
                 const rawContoursCount = detector.contours ? detector.contours.length : 0;
                 const candidatesCount = detector.candidates ? detector.candidates.length : 0;
@@ -506,8 +503,9 @@
             frameCount++;
             const now = performance.now();
             if (now >= lastTime + 1000) {
-                const telFps = document.getElementById('telFps');
-                telFps.innerText = `${Math.round((frameCount * 1000) / (now - lastTime))} FPS`;
+                if (telFps) {
+                    telFps.innerText = `${Math.round((frameCount * 1000) / (now - lastTime))} FPS`;
+                }    
                 frameCount = 0;
                 lastTime = now;
             }
