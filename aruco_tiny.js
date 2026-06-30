@@ -214,7 +214,7 @@ AR.Detector.prototype.detect = function(imageSrc){
 
   CV.grayscale(imageSrc, this.grey);
   // Адаптивный порог под мелкое разрешение
-  CV.adaptiveThreshold(this.grey, this.thres, 15, 15);
+  CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
 
   this.contours = [];
   CV.findContours(this.thres, this.contours);
@@ -225,16 +225,20 @@ AR.Detector.prototype.detect = function(imageSrc){
   for (; i < len; ++ i){
     contour = this.contours[i];
 
-    // Ослабляем фильтр: пропускаем даже небольшие контуры
-    if (contour.length > 30){
+    if (contour.length > 25){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
       if (approx.length === 4 && this.isConvex(approx)){
-          this.candidates.push(approx);
+        // Считаем площадь четырехугольника
+        var area = CV.area(approx);
+        // Отсекаем мусор меньше 150 кв. пикселей (слишком мелкий для распознавания)
+        if (area > 150) {
+            this.candidates.push(approx);
+        }
       }
     }
-  }
+  }  
   
   // Записываем реальное количество выживших кандидатов для нашей телеметрии
   window.realCandidatesCount = this.candidates.length;
@@ -345,10 +349,28 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       var pt = getPointInQuad(corners, xPercent, yPercent);
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
-      cx = Math.max(0, Math.min(width - 1, cx));
-      cy = Math.max(0, Math.min(height - 1, cy));
-      var idx = cy * width + cx;
-      fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
+
+      // Сглаживание выборки по маске 3х3
+      var whitePixelsCount = 0;
+      var totalSampled = 0;
+
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          var nx = cx + dx;
+          var ny = cy + dy;
+          // Проверяем границы кадра
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            var sampleIdx = ny * width + nx;
+            if (src[sampleIdx] > 127) {
+              whitePixelsCount++;
+            }
+            totalSampled++;
+          }
+        }
+      }
+      
+      // Если больше половины пикселей в блоке 3х3 белые — ячейка белая
+      fullMatrix[i][j] = (whitePixelsCount > (totalSampled / 2)) ? 1 : 0;
     }
   }
 
