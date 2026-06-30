@@ -362,38 +362,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Клонируем bits, чтобы не ломать историю ссылками
-  var bitsClone = [];
-  for (var k = 0; k < 5; ++k) {
-    bitsClone[k] = bits[k].slice();
-  }
-
-  // Добавляем текущий кадр в историю
-  window.matrixHistory.push(bitsClone);
-  if (window.matrixHistory.length > 5) {
-    window.matrixHistory.shift(); // Храним только последние 5 кадров
-  }
-  
-  // Строим стабильную матрицу на основе голосования большинства кадрах
-  var stableBits = [];
-  for (var i = 0; i < 5; ++i) {
-    stableBits[i] = [];
-    for (var j = 0; j < 5; ++j) {
-      var onesCount = 0;
-      for (var h = 0; h < window.matrixHistory.length; ++h) {
-        if (window.matrixHistory[h][i][j] === 1) {
-          onesCount++;
-        }
-      }
-      // Если в большинстве кадров ячейка была белой (1), фиксируем 1
-      stableBits[i][j] = (onesCount >= Math.ceil(window.matrixHistory.length / 2)) ? 1 : 0;
-    }
-  }
-
-  // Подменяем сырые биты на стабильные для дальнейшей проверки и вывода
-  bits = stableBits;
-  window.lastReadMatrix = bits;
-
+  // Сразу объявляем realDataset и считаем ошибки поворотов, БЕЗ предварительного забивания истории
   var realDataset = [
     [1, 1, 1, 1, 0],
     [0, 0, 1, 1, 1],
@@ -423,6 +392,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   if (bestErrors <= 5) {
+    // Разворачиваем сырые биты в правильную ориентацию перед тем как класть в историю
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
       rotatedBits[y] = [];
@@ -434,8 +404,39 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         rotatedBits[y][x] = bits[ry][rx];
       }
     }
-    window.lastReadMatrix = rotatedBits;    
+
+    // Клонируем развернутую матрицу в историю
+    var bitsClone = [];
+    for (var k = 0; k < 5; ++k) {
+      bitsClone[k] = rotatedBits[k].slice();
+    }
+    
+    window.matrixHistory.push(bitsClone);
+    if (window.matrixHistory.length > 5) {
+      window.matrixHistory.shift();
+    }
+    
+    // Голосование большинства
+    var stableBits = [];
+    for (var i = 0; i < 5; ++i) {
+      stableBits[i] = [];
+      for (var j = 0; j < 5; ++j) {
+        var onesCount = 0;
+        for (var h = 0; h < window.matrixHistory.length; ++h) {
+          if (window.matrixHistory[h][i][j] === 1) {
+            onesCount++;
+          }
+        }
+        stableBits[i][j] = (onesCount > (window.matrixHistory.length / 2)) ? 1 : 0;
+      }
+    }
+    
+    // Выводим на экран дебага только стабильный результат
+    window.lastReadMatrix = stableBits;
+
     return new AR.Marker(100, corners);
   }
+  
+  // Если это был мусорный контур — возвращаем null, не ломая window.lastReadMatrix реального маркера
   return null;
 };
