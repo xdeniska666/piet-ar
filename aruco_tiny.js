@@ -349,7 +349,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       var cy = Math.floor(pt.y);
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
-      var idx = cy * width + cx;
       fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
     }
   }
@@ -358,11 +357,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
     for (var j = 0; j < 5; ++j) {
-      bits[i][j] = fullMatrix[i + 1][j + 1];
+    bits[i][j] = fullMatrix[i + 1][j + 1];
     }
   }
-
-  window.lastReadMatrix = bits;
 
   var realDataset = [
     [1, 1, 1, 1, 0],
