@@ -410,6 +410,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }  
   }
 
+  // Перед самым выходом из функции сохраняем сырую матрицу для отладки на экране
+  window.lastReadMatrix = bits;
+
   if (bestErrors <= 5) {
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
