@@ -226,7 +226,7 @@ AR.Detector.prototype.detect = function(imageSrc){
     contour = this.contours[i];
 
     // Ослабляем фильтр: пропускаем даже небольшие контуры
-    if (contour.length > 25){
+    if (contour.length > 30){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
@@ -283,8 +283,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var height = img.height;
   var src = img.data;
 
-  // ХАК ДЛЯ ТЕЛЕМЕТРИИ: Перехватываем структуру до очистки памяти
-  try {
+  try { 
     if (candidate) {
       var keys = Object.keys(candidate).join(', ');
       var sample = "";
@@ -348,6 +347,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       var cy = Math.floor(pt.y);
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
+      var idx = cy * width + cx;
       fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
     }
   }
@@ -369,6 +369,8 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   ];
 
   var bestErrors = 100;
+  var bestRotation = 0;
+
   for (var rotation = 0; rotation < 4; ++rotation) {
     var eOut = 0;
     for (var y = 0; y < 5; ++y) {
@@ -380,13 +382,25 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         if (bits[ry][rx] !== realDataset[y][x]) eOut++;
       }
     }
-    if (eOut < bestErrors) bestErrors = eOut;
+    if (eOut < bestErrors) {
+      bestErrors = eOut;
+      bestRotation = rotation;
+    }  
   }
 
-  // Записываем матрицу в любом случае, чтобы видеть геометрию на экране
-  window.lastReadMatrix = bits;
-
-  if (bestErrors <= 6) {
+  if (bestErrors <= 5) {
+    var rotatedBits = [];
+    for (var y = 0; y < 5; ++y) {
+      rotatedBits[y] = [];
+      for (var x = 0; x < 5; ++x) {
+        var rx = x, ry = y;
+        if (bestRotation === 1) { rx = y; ry = 4 - x; }
+        else if (bestRotation === 2) { rx = 4 - x; ry = 4 - y; }
+        else if (bestRotation === 3) { rx = 4 - y; ry = x; }
+        rotatedBits[y][x] = bits[ry][rx];
+      }
+    }
+    window.lastReadMatrix = rotatedBits;    
     return new AR.Marker(100, corners);
   }
   return null;
