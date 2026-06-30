@@ -226,12 +226,11 @@ AR.Detector.prototype.detect = function(imageSrc){
     contour = this.contours[i];
 
     // Ослабляем фильтр: пропускаем даже небольшие контуры
-    if (contour.length > 10){
+    if (contour.length > 25){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
-      if (approx.length === 4){
-          // Убираем проверку на выпуклость и лимиты площади, пушим всё подряд
+      if (approx.length === 4 && this.isConvex(approx)){
           this.candidates.push(approx);
       }
     }
@@ -384,8 +383,10 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     if (eOut < bestErrors) bestErrors = eOut;
   }
 
+  // Записываем матрицу в любом случае, чтобы видеть геометрию на экране
+  window.lastReadMatrix = bits;
+
   if (bestErrors <= 6) {
-    window.lastReadMatrix = bits;
     return new AR.Marker(100, corners);
   }
   return null;
