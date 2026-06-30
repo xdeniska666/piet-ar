@@ -349,9 +349,11 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       var pt = getPointInQuad(corners, xPercent, yPercent);
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
+      cx = Math.max(0, Math.min(width - 1, cx));
+      cy = Math.max(0, Math.min(height - 1, cy));
 
       // Сглаживание выборки по маске 3х3
-      var whitePixelsCount = 0;
+      var activePixelsCount = 0;
       var totalSampled = 0;
 
       for (var dy = -1; dy <= 1; dy++) {
@@ -361,16 +363,17 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
           // Проверяем границы кадра
           if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
             var sampleIdx = ny * width + nx;
-            if (src[sampleIdx] > 0) {
-              whitePixelsCount++;
+            // Проверяем на 255, так как адаптивный порог выдает инверсию
+            if (src[sampleIdx] === 255) {
+              activePixelsCount++;
             }
             totalSampled++;
           }
         }
       }
       
-      // Если больше половины пикселей в блоке 3х3 белые — ячейка белая
-      fullMatrix[i][j] = (whitePixelsCount > (totalSampled / 2)) ? 1 : 0;
+      // Учитываем инверсию: если в thres пиксель белый (255), то на маркере он ЧЕРНЫЙ (0)
+      fullMatrix[i][j] = (activePixelsCount > (totalSampled / 2)) ? 0 : 1;
     }
   }
 
