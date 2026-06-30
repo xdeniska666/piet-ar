@@ -225,20 +225,16 @@ AR.Detector.prototype.detect = function(imageSrc){
   for (; i < len; ++ i){
     contour = this.contours[i];
 
-    if (contour.length > 25){
+    // Ослабляем фильтр: пропускаем даже небольшие контуры
+    if (contour.length > 30){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
   
       if (approx.length === 4 && this.isConvex(approx)){
-        // Считаем площадь четырехугольника
-        var area = CV.area(approx);
-        // Отсекаем мусор меньше 150 кв. пикселей (слишком мелкий для распознавания)
-        if (area > 150) {
-            this.candidates.push(approx);
-        }
+          this.candidates.push(approx);
       }
     }
-  }  
+  }
   
   // Записываем реальное количество выживших кандидатов для нашей телеметрии
   window.realCandidatesCount = this.candidates.length;
@@ -278,6 +274,7 @@ AR.Detector.prototype.isConvex = function(contour){
 
 // Глобальный буфер для вывода матрицы на экран дебага
 window.lastReadMatrix = null;
+window.matrixHistory = [];
 
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var img = imageThres || this.thres;
@@ -351,39 +348,51 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       var cy = Math.floor(pt.y);
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
-
-      // Сглаживание выборки по маске 3х3
-      var activePixelsCount = 0;
-      var totalSampled = 0;
-
-      for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
-          var nx = cx + dx;
-          var ny = cy + dy;
-          // Проверяем границы кадра
-          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-            var sampleIdx = ny * width + nx;
-            // Проверяем на 255, так как адаптивный порог выдает инверсию
-            if (src[sampleIdx] === 255) {
-              activePixelsCount++;
-            }
-            totalSampled++;
-          }
-        }
-      }
-      
-      // Учитываем инверсию: если в thres пиксель белый (255), то на маркере он ЧЕРНЫЙ (0)
-      fullMatrix[i][j] = (activePixelsCount > (totalSampled / 2)) ? 0 : 1;
+      var idx = cy * width + cx;
+      fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
     }
   }
 
+  // Массив bits 5x5 из fullMatrix 7x7
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
     for (var j = 0; j < 5; ++j) {
-    bits[i][j] = fullMatrix[i + 1][j + 1];
+      bits[i][j] = fullMatrix[i + 1][j + 1];
     }
   }
+
+  // Клонируем bits, чтобы не ломать историю ссылками
+  var bitsClone = [];
+  for (var k = 0; k < 5; ++k) {
+    bitsClone[k] = bits[k].slice();
+  }
+
+  // Добавляем текущий кадр в историю
+  window.matrixHistory.push(bitsClone);
+  if (window.matrixHistory.length > 5) {
+    window.matrixHistory.shift(); // Храним только последние 5 кадров
+  }
+  
+  // Строим стабильную матрицу на основе голосования большинства кадрах
+  var stableBits = [];
+  for (var i = 0; i < 5; ++i) {
+    stableBits[i] = [];
+    for (var j = 0; j < 5; ++j) {
+      var onesCount = 0;
+      for (var h = 0; h < window.matrixHistory.length; ++h) {
+        if (window.matrixHistory[h][i][j] === 1) {
+          onesCount++;
+        }
+      }
+      // Если в большинстве кадров ячейка была белой (1), фиксируем 1
+      stableBits[i][j] = (onesCount >= Math.ceil(window.matrixHistory.length / 2)) ? 1 : 0;
+    }
+  }
+
+  // Подменяем сырые биты на стабильные для дальнейшей проверки и вывода
+  bits = stableBits;
+  window.lastReadMatrix = bits;
 
   var realDataset = [
     [1, 1, 1, 1, 0],
@@ -412,9 +421,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       bestRotation = rotation;
     }  
   }
-
-  // Перед самым выходом из функции сохраняем сырую матрицу для отладки на экране
-  window.lastReadMatrix = bits;
 
   if (bestErrors <= 5) {
     var rotatedBits = [];
