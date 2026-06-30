@@ -214,7 +214,7 @@ AR.Detector.prototype.detect = function(imageSrc){
 
   CV.grayscale(imageSrc, this.grey);
   // Адаптивный порог под мелкое разрешение
-  CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
+  CV.adaptiveThreshold(this.grey, this.thres, 15, 15);
 
   this.contours = [];
   CV.findContours(this.thres, this.contours);
