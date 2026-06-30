@@ -361,7 +361,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
           // Проверяем границы кадра
           if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
             var sampleIdx = ny * width + nx;
-            if (src[sampleIdx] > 127) {
+            if (src[sampleIdx] > 0) {
               whitePixelsCount++;
             }
             totalSampled++;
