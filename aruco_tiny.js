@@ -339,11 +339,19 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   var fullMatrix = [];
+  // Вводим безопасный отступ в 4% от краев контура, чтобы компенсировать наклон перспективы
+  var minPct = 0.04;
+  var maxPct = 0.96;
+  var pctRange = maxPct - minPct;
+
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
-    var yPercent = (i + 0.5) / 7;
+    // Вычисляем процент по Y с учетом сжатия сетки внутрь черной рамки
+    var yPercent = minPct + ((i + 0.5) / 7) * pctRange;
     for (var j = 0; j < 7; ++j) {
-      var xPercent = (j + 0.5) / 7;
+      // Вычисляем процент по X с учетом сжатия
+      var xPercent = minPct + ((j + 0.5) / 7) * pctRange;
+      
       var pt = getPointInQuad(corners, xPercent, yPercent);
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
