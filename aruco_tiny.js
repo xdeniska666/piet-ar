@@ -275,6 +275,7 @@ AR.Detector.prototype.isConvex = function(contour){
 // Глобальный буфер для вывода матрицы на экран дебага
 window.lastReadMatrix = null;
 window.matrixHistory = [];
+window.prevCorners = null;
 
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var img = imageThres || this.thres;
@@ -391,8 +392,21 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }  
   }
 
-  if (bestErrors <= 5) {
-    // Разворачиваем сырые биты в правильную ориентацию перед тем как класть в историю
+  if (bestErrors <= 8) {
+    // Сглаживание геометрии углов (LERP) между кадрами
+    var smoothCorners = [];
+    if (window.prevCorners) {
+      for (var c = 0; c < 4; c++) {
+        smoothCorners.push({
+          x: window.prevCorners[c].x * 0.7 + corners[c].x * 0.3,
+          y: window.prevCorners[c].y * 0.7 + corners[c].y * 0.3
+        });
+      }
+    } else {
+      smoothCorners = corners;
+    }
+      
+    // Разворачиваем сырые биты в правильную ориентацию на основе сглаженных углов
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
       rotatedBits[y] = [];
@@ -416,7 +430,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       window.matrixHistory.shift();
     }
     
-    // Голосование большинства
+    // Мажоритарное голосование большинства кадров
     var stableBits = [];
     for (var i = 0; i < 5; ++i) {
       stableBits[i] = [];
@@ -431,12 +445,28 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       }
     }
     
+    // Перепроверяем стабилизированную матрицу по Хэммингу перед финальным аппрувом
+    var stableErrors = 0;
+    for (var y = 0; y < 5; ++y) {
+      for (var x = 0; x < 5; ++x) {
+        if (stableBits[y][x] !== realDataset[y][x]) stableErrors++;
+      }
+    }
+
     // Выводим на экран дебага только стабильный результат
     window.lastReadMatrix = stableBits;
 
-    return new AR.Marker(100, corners);
+    // Если стабилизированная матрица прошла жесткий контроль качества — фиксируем успех
+    if (stableErrors <= 5) {
+      window.prevCorners = smoothCorners; // Запоминаем сглаженные углы для следующего кадра
+      return new AR.Marker(100, smoothCorners);
+    }
+      
+    // Если стабилизация не помогла — сбрасываем историю углов и возвращаем null
+    window.prevCorners = null;
+    return null;
   }
   
-  // Если это был мусорный контур — возвращаем null, не ломая window.lastReadMatrix реального маркера
+  // Если входящий барьер ошибок > 8 — маркер не валиден
   return null;
-};
+}; 
