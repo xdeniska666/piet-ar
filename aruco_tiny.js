@@ -354,6 +354,14 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
+  for (var i = 0; i < 7; ++i) {
+    if (fullMatrix[0][i] === 1 || fullMatrix[6][i] === 1 ||
+        fullMatrix[i][0] === 1 || fullMatrix[i][6] === 1) {
+      window.prevCorners = null; // Защита: сбрасываем геометрию, это не маркер
+      return null; // Внешняя рамка нарушена (белая ячейка на краю), мгновенный отсев мусора!
+    }
+  }
+    
   // Массив bits 5x5 из fullMatrix 7x7
   var bits = [];
   for (var i = 0; i < 5; ++i) {
