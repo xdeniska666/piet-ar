@@ -392,21 +392,31 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }  
   }
 
-  if (bestErrors <= 8) {
-    // Сглаживание геометрии углов (LERP) между кадрами
-    var smoothCorners = [];
+  if (bestErrors <= 5) {
+    // Проверяем, действительно ли это тот же маркер (расстояние между углами не более 30 пикселей)
+    var isSameMarker = false;
     if (window.prevCorners) {
+      var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));
+      if (dist < 30) {
+        isSameMarker = true;
+      }
+    }
+      
+    // Сглаживаем геометрию углов (LERP) только если это один и тот же объект
+    var smoothCorners = [];
+    if (isSameMarker) {
       for (var c = 0; c < 4; c++) {
         smoothCorners.push({
-          x: window.prevCorners[c].x * 0.7 + corners[c].x * 0.3,
-          y: window.prevCorners[c].y * 0.7 + corners[c].y * 0.3
+          x: window.prevCorners[c].x * 0.75 + corners[c].x * 0.25,
+          y: window.prevCorners[c].y * 0.75 + corners[c].y * 0.25
         });
       }
     } else {
       smoothCorners = corners;
+      window.matrixHistory = []; // Сбрасываем историю матриц, если захватили новый объект, чтобы не было каши
     }
-      
-    // Разворачиваем сырые биты в правильную ориентацию на основе сглаженных углов
+
+    // Разворачиваем сырые биты в правильную ориентацию
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
       rotatedBits[y] = [];
@@ -418,12 +428,12 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         rotatedBits[y][x] = bits[ry][rx];
       }
     }
-
+    
     // Клонируем развернутую матрицу в историю
     var bitsClone = [];
     for (var k = 0; k < 5; ++k) {
       bitsClone[k] = rotatedBits[k].slice();
-    }
+    }  
     
     window.matrixHistory.push(bitsClone);
     if (window.matrixHistory.length > 5) {
@@ -462,11 +472,11 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       return new AR.Marker(100, smoothCorners);
     }
       
-    // Если стабилизация не помогла — сбрасываем историю углов и возвращаем null
     window.prevCorners = null;
     return null;
   }
   
   // Если входящий барьер ошибок > 8 — маркер не валиден
+  window.prevCorners = null;
   return null;
 }; 
