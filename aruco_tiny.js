@@ -354,14 +354,23 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
+  var whiteBorderPixels = 0;
   for (var i = 0; i < 7; ++i) {
-    if (fullMatrix[0][i] === 1 || fullMatrix[6][i] === 1 ||
-        fullMatrix[i][0] === 1 || fullMatrix[i][6] === 1) {
-      window.prevCorners = null; // Защита: сбрасываем геометрию, это не маркер
-      return null; // Внешняя рамка нарушена (белая ячейка на краю), мгновенный отсев мусора!
+    if (fullMatrix[0][i] === 1) whiteBorderPixels++;
+    if (fullMatrix[6][i] === 1) whiteBorderPixels++;
+    // Избегаем повторного подсчета угловых ячеек
+    if (i > 0 && i < 6) {
+      if (fullMatrix[i][0] === 1) whiteBorderPixels++;
+      if (fullMatrix[i][6] === 1) whiteBorderPixels++;
     }
   }
-    
+
+  // Если на рамке больше 3 белых пикселей — это гарантированный мусор (клавиатура)
+  if (whiteBorderPixels > 3) {
+    window.prevCorners = null;
+    return null;
+  }  
+
   // Массив bits 5x5 из fullMatrix 7x7
   var bits = [];
   for (var i = 0; i < 5; ++i) {
