@@ -389,7 +389,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   // Шаг 4. Декодирование ID по правилам контрольных сумм ArUco (коды Хэмминга)
   var bestId = -1;
   var bestRotation = 0;
-  var minErrors = 4; // Максимально допустимое число ошибочных битов во всей матрице
+
+  // Снижаем допуск ошибок
+  var minErrors = 4; 
 
   for (var rotation = 0; rotation < 4; ++rotation) {
     var currentId = 0;
@@ -431,12 +433,17 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
+  // Белый список маркеров, которые физически используются в Piet-AR.
+  // Сюда нужно внести только те ID, которые ты реально распечатал или выводишь на экран.
+  // Любые другие ID, сгенерированные шумом клавиатуры, будут мгновенно отсекаться.
+  var VALID_PIET_IDS = [6, 48];
+
   // Шаг 5. Если маркер прошел валидацию, отдаем его
-  if (bestId >= 0 && bestId < 50) {
+  if (bestId >= 0 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
     // Сглаживание траектории углов (LERP) между кадрами
     var isSameMarker = false;
     if (window.prevCorners) {
-      var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));  
+      var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));
       if (dist < 30) isSameMarker = true;
     }
       
@@ -475,30 +482,14 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
 
     window.lastReadMatrix = rotatedBits;
-    window.prevCorners = smoothCorners;
-
-    if (bestId === 0) {
-      var totalOnes = 0;
-      for (var y = 0; y < 5; ++y) {
-        for (var x = 0; x < 5; ++x) {
-          if (bits[y][x] === 1) totalOnes++;
-        }
-      }
-      if (totalOnes < 2) {
-        if (typeof window.debugCandidateInfo === 'function') {
-          window.debugCandidateInfo("Отсев: Пустая матрица нулей");
-        }
-        window.prevCorners = null;
-        return null; // Бракуем маркер, не возвращаем его
-      }
-    }          
+    window.prevCorners = smoothCorners;      
   
     return new AR.Marker(bestId, smoothCorners);
   }  
   
   // Лог отсева, если маркер не подошел под Хэмминг
   if (typeof window.debugCandidateInfo === 'function') {
-    window.debugCandidateInfo("Отсев: Ошибка Хэмминга (мин ошибок: " + minErrors + ")");
+    window.debugCandidateInfo("Отсев: Ошибка Хэмминга или невалидный ID (мин ошибок: " + minErrors + ", найден ID: " + bestId + ")");
   }
   
   window.prevCorners = null;
