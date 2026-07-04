@@ -352,7 +352,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       if (i === 3 && j === 3) {
         console.log("Центр сканируется в пикселях кадра: X =", cx, "Y =", cy, "Яркость:", src[idx]);
       }
-      
+
       fullMatrix[i][j] = (src[idx] > 60) ? 1 : 0;
     }
   }
@@ -476,6 +476,22 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
 
     window.lastReadMatrix = rotatedBits;
     window.prevCorners = smoothCorners;
+
+    if (bestId === 0) {
+      var totalOnes = 0;
+      for (var y = 0; y < 5; ++y) {
+        for (var x = 0; x < 5; ++x) {
+          if (bits[y][x] === 1) totalOnes++;
+        }
+      }
+      if (totalOnes < 2) {
+        if (typeof window.debugCandidateInfo === 'function') {
+          window.debugCandidateInfo("Отсев: Пустая матрица нулей");
+        }
+        window.prevCorners = null;
+        return null; // Бракуем маркер, не возвращаем его
+      }
+    }          
   
     return new AR.Marker(bestId, smoothCorners);
   }  
