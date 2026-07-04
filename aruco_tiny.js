@@ -282,12 +282,13 @@ window.matrixHistory = [];
 window.prevCorners = null;
 
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
-  var img = imageThres || this.thres;
-  if (!img || !img.data) return null;
+  // 1. Проверяем, что картинка вообще существует, используя правильное имя аргумента
+  if (!imageThres || !imageThres.data) return null;
 
-  var width = img.width;
-  var height = img.height;
-  var src = img.data;
+  // 2. Спокойно вытаскиваем параметры
+  var width = imageThres.width;
+  var height = imageThres.height;
+  var src = imageThres.data;
 
   try { 
     if (candidate) {
