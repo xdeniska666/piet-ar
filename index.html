@@ -410,9 +410,21 @@
                 console.log(`[Кадр] Найдено контуров: ${rawContoursCount} | Кандидатов (квадратов): ${candidatesCount} | Распознано маркеров: ${recognizedCount}`);
             }
             
-            // Если ядро выдало внутреннюю причину отсева контура, пишем ее в консоль
+            // Умный перехват отладочной информации ядра
             if (window.debugCandidateInfo) {
-                console.warn(`[Причина отсева ядра]: ${window.debugCandidateInfo}`);
+                if (Array.isArray(window.debugCandidateInfo)) {
+                    // Если ядро вместо строки закинуло туда массив точек, выводим их координаты
+                    let pts = window.debugCandidateInfo.map(p => `(${Math.round(p.x)},${Math.round(p.y)})`).join(" -> ");
+                    console.warn(`[Телеметрия] Ядро застряло на контуре из точек: [ ${pts} ]`);
+                } else {
+                    // Если там все-таки текстовая строка    
+                    console.warn(`[Причина отсева ядра]: ${window.debugCandidateInfo}`);
+                }
+            }
+            
+            // Принудительно проверяем, заполнена ли матрица 5х5 в глобальном объекте
+            if (window.lastReadMatrix) {
+                console.log(`[Матрица кадра] Текущий снимок в памяти: ${JSON.stringify(window.lastReadMatrix)}`);
             }
             
             // Если маркер успешно задетектирован, подсвечиваем лог зеленым цветом
