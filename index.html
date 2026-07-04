@@ -412,12 +412,25 @@
             
             // Умный перехват отладочной информации ядра
             if (window.debugCandidateInfo) {
-                if (Array.isArray(window.debugCandidateInfo)) {
-                    // Если ядро вместо строки закинуло туда массив точек, выводим их координаты
-                    let pts = window.debugCandidateInfo.map(p => `(${Math.round(p.x)},${Math.round(p.y)})`).join(" -> ");
-                    console.warn(`[Телеметрия] Ядро застряло на контуре из точек: [ ${pts} ]`);
-                } else {
-                    // Если там все-таки текстовая строка    
+                // Проверяем, есть ли в объекте точки (индексы или свойства x, y)
+                if (typeof window.debugCandidateInfo === 'object') {
+                    try {
+                        let pts = [];
+                        // Собираем точки, если это массив или объект с числовыми ключами
+                        for (let i = 0; i < 4; i++) {
+                            if (window.debugCandidateInfo[i]) {
+                                pts.push(`(${Math.round(window.debugCandidateInfo[i].x)},${Math.round(window.debugCandidateInfo[i].y)})`);
+                            }
+                        }
+                        if (pts.length > 0) {
+                            console.warn(`[Геометрия] Ядро забраковало контур из точек: [ ${pts.join(" -> ")} ]`);
+                        } else {
+                            console.warn(`[Причина отсева ядра (объект)]:`, window.debugCandidateInfo);
+                        }
+                    } catch (e) {
+                        console.warn(`[Причина отсева ядра]: ${window.debugCandidateInfo}`);
+                    }                        
+                } else {  
                     console.warn(`[Причина отсева ядра]: ${window.debugCandidateInfo}`);
                 }
             }
