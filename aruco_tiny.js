@@ -346,13 +346,13 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         debugCtx.fillStyle = (i === 0 || i === 6 || j === 0 || j === 6) ? "red" : "blue"; 
         debugCtx.fillRect(pt.x - 1, pt.y - 1, 3, 3); // Рисуем точку 3x3 пикселя
       }
-      
+
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
       cx = Math.max(0, Math.min(width - 1, cx));
       cy = Math.max(0, Math.min(height - 1, cy));
       var idx = cy * width + cx;
-      fullMatrix[i][j] = (src[idx] > 127) ? 1 : 0;
+      fullMatrix[i][j] = (src[idx] > 60) ? 1 : 0;
     }
   }
 
