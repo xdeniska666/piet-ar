@@ -332,6 +332,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var minPct = 0.04;
   var maxPct = 0.96;
   var pctRange = maxPct - minPct;
+  var debugCtx = document.getElementById('canvasID') ? document.getElementById('canvasID').getContext('2d') : null;
 
   // Шаг 1. Считываем внешнюю рамку и внутреннее ядро (сетка 7x7)
   for (var i = 0; i < 7; ++i) {
@@ -340,6 +341,12 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     for (var j = 0; j < 7; ++j) {
       var xPercent = minPct + ((j + 0.5) / 7) * pctRange;
       var pt = getPointInQuad(corners, xPercent, yPercent);
+
+      if (debugCtx) {
+        debugCtx.fillStyle = (i === 0 || i === 6 || j === 0 || j === 6) ? "red" : "blue"; 
+        debugCtx.fillRect(pt.x - 1, pt.y - 1, 3, 3); // Рисуем точку 3x3 пикселя
+      }
+      
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
       cx = Math.max(0, Math.min(width - 1, cx));
