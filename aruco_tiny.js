@@ -290,25 +290,10 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var height = imageThres.height;
   var src = imageThres.data;
 
-  try { 
-    if (candidate) {
-      var keys = Object.keys(candidate).join(', ');
-      var sample = "";
-      if (candidate[0]) sample = " | [0]: " + Object.keys(candidate[0]).join(', ');
-      if (candidate.corners && candidate.corners[0]) sample = " | .corners[0]: " + Object.keys(candidate.corners[0]).join(', ');
-      
-      window.debugCandidateInfo = "Тип: " + (Array.isArray(candidate) ? "Массив" : typeof candidate) + " | Ключи: " + keys + sample;
-    } else {
-      window.debugCandidateInfo = "Кандидат пришел null";
-    }
-  } catch(e) {
-    window.debugCandidateInfo = "Ошибка структуры: " + e.message;
-  }
-
   var corners = [];
 
-  // Парсинг углов с автоматическим определением формата
-  try {
+  // Универсальный парсинг углов кандидатов
+  try { 
     if (candidate && candidate.corners && candidate.corners[0]) {
       corners = candidate.corners;
     } else if (candidate && candidate[0] && typeof candidate[0].x === 'number') {
@@ -319,17 +304,17 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         { x: candidate[2], y: candidate[3] },
         { x: candidate[4], y: candidate[5] },
         { x: candidate[6], y: candidate[7] }
-      ];
+      ];  
     } else if (candidate && candidate.points && candidate.points[0]) {
       corners = candidate.points;
     }
-  } catch (e) {
+  } catch(e) {
     return null;
   }
 
   if (!corners || corners.length < 4 || !corners[0]) {
     return null;
-  }
+  } 
 
   // Билинейная интерполяция
   function getPointInQuad(c, perX, perY) {
@@ -344,19 +329,16 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   var fullMatrix = [];
-  // Вводим безопасный отступ в 4% от краев контура, чтобы компенсировать наклон перспективы
   var minPct = 0.04;
   var maxPct = 0.96;
   var pctRange = maxPct - minPct;
 
+  // Шаг 1. Считываем внешнюю рамку и внутреннее ядро (сетка 7x7)
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
-    // Вычисляем процент по Y с учетом сжатия сетки внутрь черной рамки
     var yPercent = minPct + ((i + 0.5) / 7) * pctRange;
     for (var j = 0; j < 7; ++j) {
-      // Вычисляем процент по X с учетом сжатия
       var xPercent = minPct + ((j + 0.5) / 7) * pctRange;
-      
       var pt = getPointInQuad(corners, xPercent, yPercent);
       var cx = Math.floor(pt.x);
       var cy = Math.floor(pt.y);
@@ -367,24 +349,27 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
+  // Шаг 2. Проверка черной рамки маркера (она должна быть черной, т.е. нулями)
   var whiteBorderPixels = 0;
   for (var i = 0; i < 7; ++i) {
     if (fullMatrix[0][i] === 1) whiteBorderPixels++;
     if (fullMatrix[6][i] === 1) whiteBorderPixels++;
-    // Избегаем повторного подсчета угловых ячеек
     if (i > 0 && i < 6) {
       if (fullMatrix[i][0] === 1) whiteBorderPixels++;
       if (fullMatrix[i][6] === 1) whiteBorderPixels++;
     }
   }
 
-  // Если на рамке больше 3 белых пикселей — это гарантированный мусор (клавиатура)
+  // Если на рамке больше 3 белых пикселей - это гарантированный мусор (клавиатура)
   if (whiteBorderPixels > 3) {
+    if (typeof window.debugCandidateInfo === 'function') {
+      window.debugCandidateInfo("Отсев: Белая рамка (" + whiteBorderPixels + " пикс.)");
+    }  
     window.prevCorners = null;
     return null;
-  }  
+  }   
 
-  // Массив bits 5x5 из fullMatrix 7x7
+  // Шаг 3. Выделяем внутреннюю матрицу 5x5 
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
@@ -393,46 +378,60 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Сразу объявляем realDataset и считаем ошибки поворотов, БЕЗ предварительного забивания истории
-  var realDataset = [
-    [1, 1, 1, 1, 0],
-    [0, 0, 1, 1, 1],
-    [1, 1, 1, 1, 0],
-    [0, 1, 0, 0, 0],
-    [1, 1, 0, 0, 1]
-  ];
-
-  var bestErrors = 100;
+  // Шаг 4. Декодирование ID по правилам контрольных сумм ArUco (коды Хэмминга)
+  var bestId = -1;
   var bestRotation = 0;
+  var minErrors = 4; // Максимально допустимое число ошибочных битов во всей матрице
 
   for (var rotation = 0; rotation < 4; ++rotation) {
-    var eOut = 0;
+    var currentId = 0;
+    var rotationErrors = 0;
+
     for (var y = 0; y < 5; ++y) {
+      var rowBits = 0;
       for (var x = 0; x < 5; ++x) {
         var rx = x, ry = y;
         if (rotation === 1) { rx = y; ry = 4 - x; }
         else if (rotation === 2) { rx = 4 - x; ry = 4 - y; }
         else if (rotation === 3) { rx = 4 - y; ry = x; }
-        if (bits[ry][rx] !== realDataset[y][x]) eOut++;
+
+        rowBits = (rowBits << 1) | bits[ry][rx];
       }
+      
+      var dataBits = (rowBits >> 3) & 3; // 2 бита данных для словарей типа 4x4
+      var parityBits = rowBits & 7;      // 3 бита четности
+
+      // Вычисляем правильную четность для считанных данных
+      var p0 = (dataBits >> 1) & 1;
+      var p1 = dataBits & 1;
+      var expectedParity = (p0 << 2) | (p1 << 1) | (p0 ^ p1);
+
+      // Считаем ошибочные биты в этой строке
+      var diff = parityBits ^ expectedParity;
+      while (diff > 0) {
+        if (diff & 1) rotationErrors++;
+        diff >>>= 1;
+      }
+      
+      currentId = (currentId << 2) | dataBits;
     }
-    if (eOut < bestErrors) {
-      bestErrors = eOut;
+
+    if (rotationErrors < minErrors) { 
+      minErrors = rotationErrors;
+      bestId = currentId;
       bestRotation = rotation;
-    }  
+    }
   }
 
-  if (bestErrors <= 5) {
-    // Проверяем, действительно ли это тот же маркер (расстояние между углами не более 30 пикселей)
+  // Шаг 5. Если маркер прошел валидацию, отдаем его
+  if (bestId >= 0 && bestId < 50) {
+    // Сглаживание траектории углов (LERP) между кадрами
     var isSameMarker = false;
     if (window.prevCorners) {
-      var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));
-      if (dist < 30) {
-        isSameMarker = true;
-      }
+      var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));  
+      if (dist < 30) isSameMarker = true;
     }
       
-    // Сглаживаем геометрию углов (LERP) только если это один и тот же объект
     var smoothCorners = [];
     if (isSameMarker) {
       for (var c = 0; c < 4; c++) {
@@ -443,10 +442,10 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       }
     } else {
       smoothCorners = corners;
-      window.matrixHistory = []; // Сбрасываем историю матриц, если захватили новый объект, чтобы не было каши
-    }
+      window.matrixHistory = [];
+    }    
 
-    // Разворачиваем сырые биты в правильную ориентацию
+    // Сохраняем развернутую матрицу для отладочного экрана телеметрии
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
       rotatedBits[y] = [];
@@ -458,55 +457,26 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         rotatedBits[y][x] = bits[ry][rx];
       }
     }
-    
-    // Клонируем развернутую матрицу в историю
-    var bitsClone = [];
-    for (var k = 0; k < 5; ++k) {
-      bitsClone[k] = rotatedBits[k].slice();
-    }  
-    
-    window.matrixHistory.push(bitsClone);
-    if (window.matrixHistory.length > 5) {
-      window.matrixHistory.shift();
+
+    // Логирование успешного распознавания в интерфейс
+    if (typeof window.debugCandidateInfo === 'function') {
+      window.debugCandidateInfo("Успех: Маркер ID " + bestId + " (Ошибок: " + minErrors + ")");
     }
-    
-    // Мажоритарное голосование большинства кадров
-    var stableBits = [];
-    for (var i = 0; i < 5; ++i) {
-      stableBits[i] = [];
-      for (var j = 0; j < 5; ++j) {
-        var onesCount = 0;
-        for (var h = 0; h < window.matrixHistory.length; ++h) {
-          if (window.matrixHistory[h][i][j] === 1) {
-            onesCount++;
-          }
-        }
-        stableBits[i][j] = (onesCount > (window.matrixHistory.length / 2)) ? 1 : 0;
-      }
-    }
-    
-    // Перепроверяем стабилизированную матрицу по Хэммингу перед финальным аппрувом
-    var stableErrors = 0;
-    for (var y = 0; y < 5; ++y) {
-      for (var x = 0; x < 5; ++x) {
-        if (stableBits[y][x] !== realDataset[y][x]) stableErrors++;
-      }
+    if (typeof window.debugCurrentMatrix === 'function') {
+      window.debugCurrentMatrix(rotatedBits);
     }
 
-    // Выводим на экран дебага только стабильный результат
-    window.lastReadMatrix = stableBits;
-
-    // Если стабилизированная матрица прошла жесткий контроль качества — фиксируем успех
-    if (stableErrors <= 5) {
-      window.prevCorners = smoothCorners; // Запоминаем сглаженные углы для следующего кадра
-      return new AR.Marker(100, smoothCorners);
-    }
-      
-    window.prevCorners = null;
-    return null;
+    window.lastReadMatrix = rotatedBits;
+    window.prevCorners = smoothCorners;
+  
+    return new AR.Marker(bestId, smoothCorners);
+  }  
+  
+  // Лог отсева, если маркер не подошел под Хэмминг
+  if (typeof window.debugCandidateInfo === 'function') {
+    window.debugCandidateInfo("Отсев: Ошибка Хэмминга (мин ошибок: " + minErrors + ")");
   }
   
-  // Если входящий барьер ошибок > 8 — маркер не валиден
   window.prevCorners = null;
   return null;
-}; 
+};
