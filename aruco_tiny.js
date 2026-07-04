@@ -212,6 +212,10 @@ AR.Detector.prototype.detect = function(imageSrc){
   // Защита от пустых данных
   if (!imageSrc || !imageSrc.data) return [];
 
+  // Очищаем дебаг прошлых кадров, чтобы не было ложного спама
+  window.debugCandidateInfo = null;
+  window.lastReadMatrix = null;
+
   CV.grayscale(imageSrc, this.grey);
   // Адаптивный порог под мелкое разрешение
   CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
