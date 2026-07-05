@@ -195,12 +195,12 @@ AR.Detector.prototype.detect = function(imageSrc){
   // Защита от пустых данных
   if (!imageSrc || !imageSrc.data) return [];
 
-  // Очищаем дебаг прошлых кадров, чтобы не было ложного спама
+  // Очищаем дебаг прошлых кадров
   window.debugCandidateInfo = null;
   window.lastReadMatrix = null;
 
   CV.grayscale(imageSrc, this.grey);
-  // Адаптивный порог под мелкое разрешение
+  // Адаптивный порог
   CV.adaptiveThreshold(this.grey, this.thres, 7, 2);
 
   this.contours = [];
@@ -212,7 +212,6 @@ AR.Detector.prototype.detect = function(imageSrc){
   for (; i < len; ++ i){
     contour = this.contours[i];
 
-    // Ослабляем фильтр: пропускаем даже небольшие контуры
     if (contour.length > 30){
       // Рассчитываем epsilon от реального периметра контура
       approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
@@ -226,21 +225,9 @@ AR.Detector.prototype.detect = function(imageSrc){
   // Записываем реальное количество выживших кандидатов для нашей телеметрии
   window.realCandidatesCount = this.candidates.length;
   
-  // Разбор кандидатов в маркеры
-  var markers = [];
-  for (i = 0; i < this.candidates.length; ++ i){
-    var marker = this.getMarker(this.thres, this.candidates[i]);
-    if (marker){
-      markers.push(marker);
-    }
-  }
+  // Передаем кандидатов в канонический конвейер поиска маркеров
+  var markers = this.findMarkers(this.thres, this.candidates);
 
-  // Если ни одного маркера не распознано вообще во всем кадре, плавно сбрасываем историю углов
-  if (markers.length === 0) {
-    window.prevCorners = null;
-  }
-
-  // Если вызывающая программа просит сырые контуры для отладки
   if (imageSrc.returnContours) {    
     return this.contours;
   }
@@ -248,6 +235,80 @@ AR.Detector.prototype.detect = function(imageSrc){
   return markers;
 };
 
+AR.Detector.prototype.findMarkers = function(imageThres, candidates) {
+  var markers = [];
+
+  for (var i = 0; i < candidates.length; ++i) {
+    // Временный вызов старого getMarker, на Шаге 2 мы переведем его на warp
+    var marker = this.getMarker(imageThres, candidates[i]);
+    if (marker) {
+      markers.push(marker);
+    }  
+  }
+
+  if (markers.length === 0) {
+    window.prevCorners = null;
+  }
+  
+  return markers;
+};
+
+// МАТЕМАТИЧЕСКИЙ ДВИЖОК ГЕОМЕТРИИ (WARP)
+CV.getPerspectiveTransform = function(src, size) {
+  var x0 = src[0].x, y0 = src[0].y,
+      x1 = src[1].x, y1 = src[1].y,
+      x2 = src[2].x, y2 = src[2].y,
+      x3 = src[3].x, y3 = src[3].y;
+
+  var dx1 = x1 - x2, dy1 = y1 - y2;
+  var dx2 = x3 - x2, dy2 = y3 - y2;
+  var sx = x0 - x1 + x2 - x3;
+  var sy = y0 - y1 + y2 - y3;
+  var gDen = dx1 * dy2 - dx2 * dy1;
+  
+  if (Math.abs(gDen) < 1e-7) return null;
+
+  var g = (sx * dy2 - dx2 * sy) / gDen;
+  var h = (dx1 * sy - sx * dy1) / gDen;
+
+  var a = x1 - x0 + g * x1;
+  var b = x3 - x0 + h * x3;
+  var c = x0;
+  var d = y1 - y0 + g * y1;
+  var e = y3 - y0 + h * y3;
+  var f = y0;
+
+  return [a, b, c, d, e, f, g, h, 1.0];
+};
+
+CV.warp = function(imageSrc, M, size) {
+  var imageDst = new CV.Image(size, size);
+  imageDst.data = new Uint8Array(size * size);
+
+  var src = imageSrc.data, dst = imageDst.data;
+  var width = imageSrc.width, height = imageSrc.height;
+
+  var a = M[0], b = M[1], c = M[2],
+      d = M[3], e = M[4], f = M[5],
+      g = M[6], h = M[7];
+
+  var idx = 0;
+  for (var y = 0; y < size; ++y) {
+    for (var x = 0; x < size; ++x) {
+      var den = g * x + h * y + 1.0;
+      var sx = Math.floor((a * x + b * y + c) / den);
+      var sy = Math.floor((d * x + e * y + f) / den);
+      
+      if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+        dst[idx++] = src[sy * width + sx];
+      } else {
+        dst[idx++] = 0;
+      }
+    }
+  }
+  return imageDst;
+};
+          
 AR.Detector.prototype.isConvex = function(contour){
   var len = contour.length, i = 0, j = 0, k = 0, sign = 0;
   for (; i < len; ++ i){
