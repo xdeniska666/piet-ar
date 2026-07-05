@@ -12,6 +12,10 @@ CV.Image = function(width, height){
 
 CV.grayscale = function(imageSrc, imageDst){
   var src = imageSrc.data, dst = imageDst.data, len = src.length, i = 0, j = 0;
+  if (dst.length !== len / 4) {
+    imageDst.data = new Uint8Array(len / 4);
+    dst = imageDst.data;
+  }  
   for (; i < len; i += 4){
     dst[j ++] = (src[i] * 0.299 + src[i + 1] * 0.587 + src[i + 2] * 0.114 + 0.5) >>> 0;
   }
@@ -34,6 +38,7 @@ CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
 
   if (imageDst.data.length !== len){
     imageDst.data = new Uint8Array(len);
+    dst = imageDst.data;
   } 
 
   for (y = 0; y < height; ++ y){
@@ -63,37 +68,19 @@ CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
   return imageDst;
 };
 
-/*CV.otsu = function(imageSrc){
-  var src = imageSrc.data, len = src.length, i, hist = [], threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0, mu;
-  
-  for (i = 0; i < 256; ++ i){
-    hist[i] = 0;
-  }
-  for (i = 0; i < len; ++ i){
-    hist[src[i]] ++;
-  }
-  for (i = 0; i < 256; ++ i){
-    sum += i * hist[i];
-  }
-  for (i = 0; i < 256; ++ i){
-    wB += hist[i];
-    if (0 === wB) continue;
-    wF = len - wB;
-    if (0 === wF) break;
-    sumB += i * hist[i];
-    mu = sumB / wB - (sum - sumB) / wF;
-    if (wB * wF * mu * mu > max){
-      max = wB * wF * mu * mu;
-      threshold = i;
-    }
-  }
-
-  return threshold;
-};*/
+// Выносим visited в глобальный кеш слоя CV, чтобы не плодить объекты в памяти
+CV.visitedCache = null;
 
 CV.findContours = function(imageSrc, contours) {  
   var src = imageSrc.data, width = imageSrc.width, height = imageSrc.height;
-  var visited = new Uint8Array(width * height);
+  var totalPixels = width * height;
+
+  if (!CV.visitedCache || CV.visitedCache.length !== totalPixels) {
+    CV.visitedCache = new Uint8Array(totalPixels);
+  } else {
+    CV.visitedCache.fill(0);
+  }
+  var visited = CV.visitedCache;      
 
   // Направления: вправо, вниз, влево, вверх
   var dx = [1, 0, -1, 0];
@@ -199,13 +186,9 @@ AR.Marker = function(id, corners){
 AR.Detector = function(){
   this.grey = new CV.Image();
   this.thres = new CV.Image();
-  this.contour = [];
-  this.poly = [];
-  this.candidate = [];
+  this.contours = [];
   this.candidates = [];
-
-  // Жестко снижаем порог фильтрации по размеру для низкого разрешения кадра
-  this.minSize = 10; // Было значительно больше, из-за чего отсекались маркеры
+  this.minSize = 10;
 };
 
 AR.Detector.prototype.detect = function(imageSrc){
@@ -250,6 +233,11 @@ AR.Detector.prototype.detect = function(imageSrc){
     if (marker){
       markers.push(marker);
     }
+  }
+
+  // Если ни одного маркера не распознано вообще во всем кадре, плавно сбрасываем историю углов
+  if (markers.length === 0) {
+    window.prevCorners = null;
   }
 
   // Если вызывающая программа просит сырые контуры для отладки
@@ -312,9 +300,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     return null;
   }
 
-  if (!corners || corners.length < 4 || !corners[0]) {
-    return null;
-  } 
+  if (!corners || corners.length < 4 || !corners[0]) return null; 
 
   // Билинейная интерполяция
   function getPointInQuad(c, perX, perY) {
@@ -332,7 +318,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var minPct = 0.04;
   var maxPct = 0.96;
   var pctRange = maxPct - minPct;
-  var debugCtx = document.getElementById('canvasID') ? document.getElementById('canvasID').getContext('2d') : null;
+  //  var debugCtx = document.getElementById('canvasID') ? document.getElementById('canvasID').getContext('2d') : null;
 
   // Шаг 1. Считываем внешнюю рамку и внутреннее ядро (сетка 7x7)
   for (var i = 0; i < 7; ++i) {
@@ -372,8 +358,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   if (whiteBorderPixels > 3) {
     if (typeof window.debugCandidateInfo === 'function') {
       window.debugCandidateInfo("Отсев: Белая рамка (" + whiteBorderPixels + " пикс.)");
-    }  
-    window.prevCorners = null;
+    } 
     return null;
   }   
 
@@ -436,10 +421,10 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   // Белый список маркеров, которые физически используются в Piet-AR.
   // Сюда нужно внести только те ID, которые ты реально распечатал или выводишь на экран.
   // Любые другие ID, сгенерированные шумом клавиатуры, будут мгновенно отсекаться.
-  var VALID_PIET_IDS = [6, 48];
+  var VALID_PIET_IDS = [0, 6, 48];
 
   // Шаг 5. Если маркер прошел валидацию, отдаем его
-  if (bestId >= 0 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
+  if (bestId >= 0 && minErrors < 4 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
     // Сглаживание траектории углов (LERP) между кадрами
     var isSameMarker = false;
     if (window.prevCorners) {
@@ -492,6 +477,5 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     window.debugCandidateInfo("Отсев: Ошибка Хэмминга или невалидный ID (мин ошибок: " + minErrors + ", найден ID: " + bestId + ")");
   }
   
-  window.prevCorners = null;
   return null;
 };
