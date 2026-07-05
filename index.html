@@ -206,7 +206,11 @@
         }
             
         const constraints = {
-            video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
+            video: {
+                facingMode: "environment", 
+                width: { ideal: 640 }, 
+                height: { ideal: 480 }
+            }    
         };
 
         navigator.mediaDevices.getUserMedia(constraints)
@@ -375,9 +379,9 @@
 
             // Жестко держим размеры холста 240х320
             if (video.videoWidth && video.videoHeight) {
-                if (canvas.width !== 240 || canvas.height !== 320) {
-                    canvas.width = 240;
-                    canvas.height = 320;
+                if (canvas.width !== 360 || canvas.height !== 480) {
+                    canvas.width = 360;
+                    canvas.height = 480;
                 }
             }
 
@@ -411,7 +415,7 @@
             }
             
             // Логируем причину отсева только если на кадре были кандидаты и пришла свежая строка
-            if (candidatesCount > 0 && window.debugCandidateInfo) {
+            if (candidatesCount > 0 && window.debugCandidateInfo) { 
                 console.warn(`[Причина отсева ядра]: ${window.debugCandidateInfo}`);
             }    
             

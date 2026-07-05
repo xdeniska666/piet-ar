@@ -201,7 +201,7 @@ AR.Detector.prototype.detect = function(imageSrc){
 
   CV.grayscale(imageSrc, this.grey);
   // Адаптивный порог под мелкое разрешение
-  CV.adaptiveThreshold(this.grey, this.thres, 7, 7);
+  CV.adaptiveThreshold(this.grey, this.thres, 7, 2);
 
   this.contours = [];
   CV.findContours(this.thres, this.contours);
@@ -376,7 +376,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var bestRotation = 0;
 
   // Снижаем допуск ошибок
-  var minErrors = 4; 
+  var minErrors = 2; 
 
   for (var rotation = 0; rotation < 4; ++rotation) {
     var currentId = 0;
@@ -424,7 +424,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   var VALID_PIET_IDS = [0, 6, 48];
 
   // Шаг 5. Если маркер прошел валидацию, отдаем его
-  if (bestId >= 0 && minErrors < 4 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
+  if (bestId >= 0 && minErrors < 2 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
     // Сглаживание траектории углов (LERP) между кадрами
     var isSameMarker = false;
     if (window.prevCorners) {
