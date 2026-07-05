@@ -294,7 +294,10 @@ CV.warp = function(imageSrc, M, size) {
 
   var idx = 0;
   for (var y = 0; y < size; ++y) {
+    var ny = y / size; // Нормализуем y в диапазон 0..1
     for (var x = 0; x < size; ++x) {
+      var nx = x / size; // Нормализуем x в диапазон 0..1
+      
       var den = g * x + h * y + 1.0;
       var sx = Math.floor((a * x + b * y + c) / den);
       var sy = Math.floor((d * x + e * y + f) / den);
