@@ -333,27 +333,31 @@ window.prevCorners = null;
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   if (!imageThres || !imageThres.data) return null;
 
-  var corners = [];
-  try { 
-    if (candidate && candidate.corners && candidate.corners[0]) {
-      corners = candidate.corners;
-    } else if (candidate && candidate[0] && typeof candidate[0].x === 'number') {
-      corners = candidate;
-    } else if (candidate && typeof candidate[0] === 'number') {
-      corners = [
-        { x: candidate[0], y: candidate[1] },
-        { x: candidate[2], y: candidate[3] },
-        { x: candidate[4], y: candidate[5] },
-        { x: candidate[6], y: candidate[7] }
-      ];  
-    } else if (candidate && candidate.points && candidate.points[0]) {
-      corners = candidate.points;
-    }
-  } catch(e) {
-    return null;
+  var corners = null;
+
+  // Жесткая нормализация входных данных кандидата
+  if (Array.isArray(candidate) && candidate.length === 4 && typeof candidate[0].x === 'number') {
+    corners = candidate;
+  } else if (candidate && candidate[0] && typeof candidate[0].x === 'number') {
+    corners = candidate.corners;
+  } else if (candidate.points && Array.isArray(candidate.points)) {
+    corners = candidate.points;
+  } else if (Array.isArray(candidate) && candidate.length === 8) {
+    corners = [  
+      { x: candidate[0], y: candidate[1] },
+      { x: candidate[2], y: candidate[3] },
+      { x: candidate[4], y: candidate[5] },
+      { x: candidate[6], y: candidate[7] }
+    ];  
   }
 
-  if (!corners || corners.length < 4 || !corners[0]) return null; 
+  // Если не смогли распарсить 4 точки — выходим
+  if (!corners || corners.length < 4 || !corners[0] || typeof corners[0].x !== 'number') {
+    if (typeof window.debugCandidateInfo === 'function') {
+      window.debugCandidateInfo("Отсев: неверный формат структуры углов");
+    }
+    return null;
+  }     
 
   // Вычисляем матрицу гомографии для выравнивания маркера в квадрат 49x49 пикселей
   // Маркер 7x7 ячеек, по 7 пикселей на ячейку = 49 пикселей
