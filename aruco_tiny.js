@@ -406,20 +406,20 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   // Проверка внешней рамки (должна быть полностью черной)
-  var whiteBorderPixels = 0;
+  var borderErrors = 0;
   for (var i = 0; i < 7; ++i) {
-    if (fullMatrix[0][i] === 1) whiteBorderPixels++;
-    if (fullMatrix[6][i] === 1) whiteBorderPixels++;
+    if (fullMatrix[0][i] === 0) borderErrors++;
+    if (fullMatrix[6][i] === 0) borderErrors++;
     if (i > 0 && i < 6) {
-      if (fullMatrix[i][0] === 1) whiteBorderPixels++;
-      if (fullMatrix[i][6] === 1) whiteBorderPixels++;
+      if (fullMatrix[i][0] === 0) borderErrors++;
+      if (fullMatrix[i][6] === 0) borderErrors++;
     }
   }
 
-  // Если в черной рамке слишком много белых ячеек, это не маркер
-  if (whiteBorderPixels > 3) {
+  // Если в черной рамке слишком много ошибочных белых ячеек (0), это не маркер
+  if (borderErrors > 3) {
     if (typeof window.debugCandidateInfo === 'function') {
-      window.debugCandidateInfo("Отсев: Белая рамка (" + whiteBorderPixels + " ячеек)");
+      window.debugCandidateInfo("Отсев: Искажение рамки (" + borderErrors + " светлых ячеек)");
     } 
     return null;
   }   
