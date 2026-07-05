@@ -331,17 +331,9 @@ window.matrixHistory = [];
 window.prevCorners = null;
 
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
-  // 1. Проверяем, что картинка вообще существует, используя правильное имя аргумента
   if (!imageThres || !imageThres.data) return null;
 
-  // 2. Спокойно вытаскиваем параметры
-  var width = imageThres.width;
-  var height = imageThres.height;
-  var src = imageThres.data;
-
   var corners = [];
-
-  // Универсальный парсинг углов кандидатов
   try { 
     if (candidate && candidate.corners && candidate.corners[0]) {
       corners = candidate.corners;
@@ -363,48 +355,50 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
 
   if (!corners || corners.length < 4 || !corners[0]) return null; 
 
-  // Билинейная интерполяция
-  function getPointInQuad(c, perX, perY) {
-    var topX = c[0].x + (c[1].x - c[0].x) * perX;
-    var topY = c[0].y + (c[1].y - c[0].y) * perX;
-    var botX = c[3].x + (c[2].x - c[3].x) * perX;
-    var botY = c[3].y + (c[2].y - c[3].y) * perX;
-    return {
-      x: topX + (botX - topX) * perY,
-      y: topY + (botY - topY) * perY
-    };
-  }
+  // Вычисляем матрицу гомографии для выравнивания маркера в квадрат 49x49 пикселей
+  // Маркер 7x7 ячеек, по 7 пикселей на ячейку = 49 пикселей
+  var cellSize = 7;
+  var markerSize = 7 * cellSize; 
+  
+  var M = CV.getPerspectiveTransform(corners, markerSize);
+  if (!M) return null;
+
+  // Вырезаем и выравниваем маркер
+  var warped = CV.warp(imageThres, M, markerSize);
+  var warpedSrc = warped.data;
 
   var fullMatrix = [];
-  var minPct = 0.04;
-  var maxPct = 0.96;
-  var pctRange = maxPct - minPct;
-  //  var debugCtx = document.getElementById('canvasID') ? document.getElementById('canvasID').getContext('2d') : null;
 
-  // Шаг 1. Считываем внешнюю рамку и внутреннее ядро (сетка 7x7)
+  // Сканируем маркер по сетке 7x7 ячеек
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
-    var yPercent = minPct + ((i + 0.5) / 7) * pctRange;
     for (var j = 0; j < 7; ++j) {
-      var xPercent = minPct + ((j + 0.5) / 7) * pctRange;
-      var pt = getPointInQuad(corners, xPercent, yPercent);
-
-      var cx = Math.floor(pt.x);
-      var cy = Math.floor(pt.y);
-      cx = Math.max(0, Math.min(width - 1, cx));
-      cy = Math.max(0, Math.min(height - 1, cy));
-      var idx = cy * width + cx;
-
-      // Выводим в консоль координаты сканирования, чтобы увидеть, куда летят лучи
-      if (i === 3 && j === 3) {
-        console.log("Центр сканируется в пикселях кадра: X =", cx, "Y =", cy, "Яркость:", src[idx]);
+      
+      // Мажоритарное голосование: считаем белые пиксели внутри ячейки
+      var whitePixels = 0;
+      var totalPixels = 0;
+      
+      // Пропускаем крайние пиксели ячейки (отступ 1 пиксель), чтобы избежать влияния границ
+      for (var cy = 1; cy < cellSize - 1; ++cy) {
+        var pixelY = i * cellSize + cy;
+        var rowOffset = pixelY * markerSize;
+        
+        for (var cx = 1; cx < cellSize - 1; ++cx) {
+          var pixelX = j * cellSize + cx;
+          
+          if (warpedSrc[rowOffset + pixelX] === 255) {
+            whitePixels++;
+          }
+          totalPixels++;
+        }
       }
 
-      fullMatrix[i][j] = (src[idx] > 60) ? 1 : 0;
+      // Если больше половины пикселей белые — ячейка белая (1), иначе черная (0)
+      fullMatrix[i][j] = (whitePixels > (totalPixels / 2)) ? 1 : 0;
     }
   }
 
-  // Шаг 2. Проверка черной рамки маркера (она должна быть черной, т.е. нулями)
+  // Проверка внешней рамки (должна быть полностью черной)
   var whiteBorderPixels = 0;
   for (var i = 0; i < 7; ++i) {
     if (fullMatrix[0][i] === 1) whiteBorderPixels++;
@@ -415,15 +409,15 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Если на рамке больше 3 белых пикселей - это гарантированный мусор (клавиатура)
+  // Если в черной рамке слишком много белых ячеек, это не маркер
   if (whiteBorderPixels > 3) {
     if (typeof window.debugCandidateInfo === 'function') {
-      window.debugCandidateInfo("Отсев: Белая рамка (" + whiteBorderPixels + " пикс.)");
+      window.debugCandidateInfo("Отсев: Белая рамка (" + whiteBorderPixels + " ячеек)");
     } 
     return null;
   }   
 
-  // Шаг 3. Выделяем внутреннюю матрицу 5x5 
+  // Извлекаем внутреннее ядро 5x5 бит
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
@@ -432,12 +426,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Шаг 4. Декодирование ID по правилам контрольных сумм ArUco (коды Хэмминга)
   var bestId = -1;
   var bestRotation = 0;
-
-  // Снижаем допуск ошибок
-  var minErrors = 2; 
+  var minErrors = 99; 
 
   for (var rotation = 0; rotation < 4; ++rotation) {
     var currentId = 0;
@@ -454,15 +445,13 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         rowBits = (rowBits << 1) | bits[ry][rx];
       }
       
-      var dataBits = (rowBits >> 3) & 3; // 2 бита данных для словарей типа 4x4
-      var parityBits = rowBits & 7;      // 3 бита четности
+      var dataBits = (rowBits >> 3) & 3; 
+      var parityBits = rowBits & 7;      
 
-      // Вычисляем правильную четность для считанных данных
       var p0 = (dataBits >> 1) & 1;
       var p1 = dataBits & 1;
       var expectedParity = (p0 << 2) | (p1 << 1) | (p0 ^ p1);
 
-      // Считаем ошибочные биты в этой строке
       var diff = parityBits ^ expectedParity;
       while (diff > 0) {
         if (diff & 1) rotationErrors++;
@@ -479,14 +468,11 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Белый список маркеров, которые физически используются в Piet-AR.
-  // Сюда нужно внести только те ID, которые ты реально распечатал или выводишь на экран.
-  // Любые другие ID, сгенерированные шумом клавиатуры, будут мгновенно отсекаться.
+  // Разрешенные ID для Piet-AR
   var VALID_PIET_IDS = [0, 6, 48];
 
-  // Шаг 5. Если маркер прошел валидацию, отдаем его
-  if (bestId >= 0 && minErrors < 2 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
-    // Сглаживание траектории углов (LERP) между кадрами
+  // Разрешаем максимум 1 ошибку (расстояние Хэмминга)
+  if (bestId >= 0 && minErrors <= 1 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
     var isSameMarker = false;
     if (window.prevCorners) {
       var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));
@@ -506,7 +492,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       window.matrixHistory = [];
     }    
 
-    // Сохраняем развернутую матрицу для отладочного экрана телеметрии
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
       rotatedBits[y] = [];
@@ -519,7 +504,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
       }
     }
 
-    // Логирование успешного распознавания в интерфейс
     if (typeof window.debugCandidateInfo === 'function') {
       window.debugCandidateInfo("Успех: Маркер ID " + bestId + " (Ошибок: " + minErrors + ")");
     }
@@ -532,11 +516,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   
     return new AR.Marker(bestId, smoothCorners);
   }  
-  
-  // Лог отсева, если маркер не подошел под Хэмминг
-  if (typeof window.debugCandidateInfo === 'function') {
-    window.debugCandidateInfo("Отсев: Ошибка Хэмминга или невалидный ID (мин ошибок: " + minErrors + ", найден ID: " + bestId + ")");
-  }
   
   return null;
 };
