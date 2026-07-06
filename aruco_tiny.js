@@ -4,12 +4,14 @@
 
 var CV = CV || {};
 
+// ---------- Базовые структуры ----------
 CV.Image = function(width, height){
   this.width = width || 0;
   this.height = height || 0;
   this.data = [];
 };
 
+// ---------- Преобразования изображения ---------- 
 CV.grayscale = function(imageSrc, imageDst){
   var src = imageSrc.data, dst = imageDst.data, len = src.length, i = 0, j = 0;
   if (dst.length !== len / 4) {
@@ -68,7 +70,7 @@ CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
   return imageDst;
 };
 
-// Выносим visited в глобальный кеш слоя CV, чтобы не плодить объекты в памяти
+// ---------- Поиск контуров с глобальным кэшем ----------
 CV.visitedCache = null;
 
 CV.findContours = function(imageSrc, contours) {  
@@ -172,88 +174,10 @@ CV.approxPolyDP = function(contour, epsilon){
   }else{
     approx = contour;  
   }
-
   return approx;
 };
 
-var AR = AR || {};
-
-AR.Marker = function(id, corners){
-  this.id = id;
-  this.corners = corners;
-};
-
-AR.Detector = function(){
-  this.grey = new CV.Image();
-  this.thres = new CV.Image();
-  this.contours = [];
-  this.candidates = [];
-  this.minSize = 10;
-};
-
-AR.Detector.prototype.detect = function(imageSrc){
-  // Защита от пустых данных
-  if (!imageSrc || !imageSrc.data) return [];
-
-  // Очищаем дебаг прошлых кадров
-  window.debugCandidateInfo = null;
-  window.lastReadMatrix = null;
-
-  CV.grayscale(imageSrc, this.grey);
-  // Адаптивный порог
-  CV.adaptiveThreshold(this.grey, this.thres, 7, 2);
-
-  this.contours = [];
-  CV.findContours(this.thres, this.contours);
-  
-  this.candidates = [];
-  var i = 0, len = this.contours.length, contour = null, approx = null;
-
-  for (; i < len; ++ i){
-    contour = this.contours[i];
-
-    if (contour.length > 30){
-      // Рассчитываем epsilon от реального периметра контура
-      approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
-  
-      if (approx.length === 4 && this.isConvex(approx)){
-          this.candidates.push(approx);
-      }
-    }
-  }
-  
-  // Записываем реальное количество выживших кандидатов для нашей телеметрии
-  window.realCandidatesCount = this.candidates.length;
-  
-  // Передаем кандидатов в канонический конвейер поиска маркеров
-  var markers = this.findMarkers(this.thres, this.candidates);
-
-  if (imageSrc.returnContours) {    
-    return this.contours;
-  }
-  
-  return markers;
-};
-
-AR.Detector.prototype.findMarkers = function(imageThres, candidates) {
-  var markers = [];
-
-  for (var i = 0; i < candidates.length; ++i) {
-    // Временный вызов старого getMarker, на Шаге 2 мы переведем его на warp
-    var marker = this.getMarker(imageThres, candidates[i]);
-    if (marker) {
-      markers.push(marker);
-    }  
-  }
-
-  if (markers.length === 0) {
-    window.prevCorners = null;
-  }
-  
-  return markers;
-};
-
-// МАТЕМАТИЧЕСКИЙ ДВИЖОК ГЕОМЕТРИИ (WARP)
+// ---------- МАТЕМАТИЧЕСКИЙ ДВИЖОК ГЕОМЕТРИИ (ГОМОГРАФИЯ) ----------
 CV.getPerspectiveTransform = function(src, size) {
   var x0 = src[0].x, y0 = src[0].y,
       x1 = src[1].x, y1 = src[1].y,
@@ -294,10 +218,7 @@ CV.warp = function(imageSrc, M, size) {
 
   var idx = 0;
   for (var y = 0; y < size; ++y) {
-    var ny = y / size; // Нормализуем y в диапазон 0..1
     for (var x = 0; x < size; ++x) {
-      var nx = x / size; // Нормализуем x в диапазон 0..1
-      
       var den = g * x + h * y + 1.0;
       var sx = Math.floor((a * x + b * y + c) / den);
       var sy = Math.floor((d * x + e * y + f) / den);
@@ -311,24 +232,103 @@ CV.warp = function(imageSrc, M, size) {
   }
   return imageDst;
 };
-          
-AR.Detector.prototype.isConvex = function(contour){
+
+// ---------- Детектор AR ----------
+var AR = AR || {};
+
+AR.Marker = function(id, corners){
+  this.id = id;
+  this.corners = corners;
+};
+
+AR.Detector = function(){
+  this.grey = new CV.Image();
+  this.thres = new CV.Image();
+  this.contours = [];
+  this.candidates = [];
+  this.minSize = 10;
+};
+
+// Проверка выпуклости контура — отсекает не-четырехугольники
+AR.Detector.prototype.isConvex = function(contour) {
   var len = contour.length, i = 0, j = 0, k = 0, sign = 0;
-  for (; i < len; ++ i){
+  for (; i < len; ++i) {
     j = (i + 1) % len;
     k = (i + 2) % len;
     var z = (contour[j].x - contour[i].x) * (contour[k].y - contour[j].y) -
             (contour[j].y - contour[i].y) * (contour[k].x - contour[j].x);
-    if (i === 0){
-      sign = z > 0? 1: z < 0? -1: 0;
-    }else if (z * sign < 0){  
+    if (i === 0) {
+      sign = z > 0 ? 1 : z < 0 ? -1 : 0;
+    } else if (z * sign < 0) {
       return false;
     }
   }
   return true;
 };
 
-// Глобальный буфер для вывода матрицы на экран дебага
+// Основной конвейер детекции      
+AR.Detector.prototype.detect = function(imageSrc){
+  // Защита от пустых данных
+  if (!imageSrc || !imageSrc.data) return [];
+
+  // Очищаем дебаг прошлых кадров
+  window.debugCandidateInfo = null;
+  window.lastReadMatrix = null;
+
+  CV.grayscale(imageSrc, this.grey);
+  // Адаптивный порог
+  CV.adaptiveThreshold(this.grey, this.thres, 15, 10);
+
+  this.contours = [];
+  CV.findContours(this.thres, this.contours);
+  
+  this.candidates = [];
+  var i = 0, len = this.contours.length, contour = null, approx = null;
+
+  for (; i < len; ++ i){
+    contour = this.contours[i];
+
+    if (contour.length > 30){
+      // Рассчитываем epsilon от реального периметра контура
+      approx = CV.approxPolyDP(contour, CV.perimeter(contour) * 0.05);
+  
+      // Интегрированная проверка на выпуклость контура
+      if (approx.length === 4 && this.isConvex(approx)){
+          this.candidates.push(approx);
+      }
+    }
+  }
+  
+  // Записываем реальное количество выживших кандидатов для нашей телеметрии
+  window.realCandidatesCount = this.candidates.length;
+  
+  // Передаем кандидатов в канонический конвейер поиска маркеров
+  var markers = this.findMarkers(this.thres, this.candidates);
+
+  if (imageSrc.returnContours) {    
+    return this.contours;
+  }
+  
+  return markers;
+};
+
+AR.Detector.prototype.findMarkers = function(imageThres, candidates) {
+  var markers = [];
+  for (var i = 0; i < candidates.length; ++i) {
+    // Временный вызов старого getMarker, на Шаге 2 мы переведем его на warp
+    var marker = this.getMarker(imageThres, candidates[i]);
+    if (marker) {
+      markers.push(marker);
+    }  
+  }
+
+  if (markers.length === 0) {
+    window.prevCorners = null;
+  }
+  return markers;
+};
+         
+// Глобальные переменные отладки и сглаживания
 window.lastReadMatrix = null;
 window.matrixHistory = [];
 window.prevCorners = null;
@@ -336,17 +336,17 @@ window.prevCorners = null;
 AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   if (!imageThres || !imageThres.data) return null;
 
-  var corners = null;
+  var rawCorners = null;
 
-  // Жесткая нормализация входных данных кандидата
+  // Парсинг структуры входных точек кандидата
   if (Array.isArray(candidate) && candidate.length === 4 && typeof candidate[0].x === 'number') {
-    corners = candidate;
+    rawCorners = candidate;
   } else if (candidate && candidate[0] && typeof candidate[0].x === 'number') {
-    corners = candidate.corners;
+    rawCorners = candidate;
   } else if (candidate.points && Array.isArray(candidate.points)) {
-    corners = candidate.points;
+    rawCorners = candidate.points;
   } else if (Array.isArray(candidate) && candidate.length === 8) {
-    corners = [  
+    rawCorners = [  
       { x: candidate[0], y: candidate[1] },
       { x: candidate[2], y: candidate[3] },
       { x: candidate[4], y: candidate[5] },
@@ -355,28 +355,29 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
   }
 
   // Если не смогли распарсить 4 точки — выходим
-  if (!corners || corners.length < 4 || !corners[0] || typeof corners[0].x !== 'number') {
+  if (!rawCorners || rawCorners.length < 4 || !rawCorners[0] || typeof rawCorners[0].x !== 'number') {
     if (typeof window.debugCandidateInfo === 'function') {
       window.debugCandidateInfo("Отсев: неверный формат структуры углов");
     }
     return null;
-  }     
+  }
 
-  // Вычисляем матрицу гомографии для выравнивания маркера в квадрат 49x49 пикселей
-  // Маркер 7x7 ячеек, по 7 пикселей на ячейку = 49 пикселей
+  // 2. Передаем проверенные углы на автоматическую сортировку [ВЛ, ВП, НП, НЛ]
+  var corners = rawCorners;
+
   var cellSize = 7;
-  var markerSize = 7 * cellSize; 
-  
+  var markerSize = 7 * cellSize;
+
+  // Корректная гомография 3х3 вместо ломающего перспективу warpQuad
   var M = CV.getPerspectiveTransform(corners, markerSize);
   if (!M) return null;
 
-  // Вырезаем и выравниваем маркер
   var warped = CV.warp(imageThres, M, markerSize);
   var warpedSrc = warped.data;
 
   var fullMatrix = [];
 
-  // Сканируем маркер по сетке 7x7 ячеек
+  // Вычисление 7x7 матрицы методом мажоритарного голосования
   for (var i = 0; i < 7; ++i) {
     fullMatrix[i] = [];
     for (var j = 0; j < 7; ++j) {
@@ -392,7 +393,6 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         
         for (var cx = 1; cx < cellSize - 1; ++cx) {
           var pixelX = j * cellSize + cx;
-          
           if (warpedSrc[rowOffset + pixelX] === 255) {
             whitePixels++;
           }
@@ -405,7 +405,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Проверка внешней рамки (должна быть полностью черной)
+  // Валидация внешней рамки маркера
   var borderErrors = 0;
   for (var i = 0; i < 7; ++i) {
     if (fullMatrix[0][i] === 0) borderErrors++;
@@ -416,15 +416,14 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Если в черной рамке слишком много ошибочных белых ячеек (0), это не маркер
   if (borderErrors > 3) {
     if (typeof window.debugCandidateInfo === 'function') {
       window.debugCandidateInfo("Отсев: Искажение рамки (" + borderErrors + " светлых ячеек)");
     } 
     return null;
-  }   
+  }
 
-  // Извлекаем внутреннее ядро 5x5 бит
+  // Извлечение полезного ядра 5x5 бит
   var bits = [];
   for (var i = 0; i < 5; ++i) {
     bits[i] = [];
@@ -435,8 +434,9 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
 
   var bestId = -1;
   var bestRotation = 0;
-  var minErrors = 99; 
+  var minErrors = 99;
 
+  // Декодирование Хэмминга с проверкой 4-х вращений маркера
   for (var rotation = 0; rotation < 4; ++rotation) {
     var currentId = 0;
     var rotationErrors = 0;
@@ -451,7 +451,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
 
         rowBits = (rowBits << 1) | bits[ry][rx];
       }
-      
+
       var dataBits = (rowBits >> 3) & 3; 
       var parityBits = rowBits & 7;      
 
@@ -464,8 +464,8 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
         if (diff & 1) rotationErrors++;
         diff >>>= 1;
       }
-      
-      currentId = (currentId << 2) | dataBits;
+
+        currentId = (currentId << 2) | dataBits;
     }
 
     if (rotationErrors < minErrors) { 
@@ -475,17 +475,17 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
   }
 
-  // Разрешенные ID для Piet-AR
+  // Фильтр разрешенных ID для Piet-AR
   var VALID_PIET_IDS = [0, 6, 48];
 
-  // Разрешаем максимум 1 ошибку (расстояние Хэмминга)
   if (bestId >= 0 && minErrors <= 1 && VALID_PIET_IDS.indexOf(bestId) !== -1) {
     var isSameMarker = false;
     if (window.prevCorners) {
       var dist = Math.sqrt(Math.pow(corners[0].x - window.prevCorners[0].x, 2) + Math.pow(corners[0].y - window.prevCorners[0].y, 2));
       if (dist < 30) isSameMarker = true;
     }
-      
+
+    // Сглаживание дрожания углов (LERP)
     var smoothCorners = [];
     if (isSameMarker) {
       for (var c = 0; c < 4; c++) {
@@ -497,7 +497,7 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     } else {
       smoothCorners = corners;
       window.matrixHistory = [];
-    }    
+    }
 
     var rotatedBits = [];
     for (var y = 0; y < 5; ++y) {
@@ -519,10 +519,10 @@ AR.Detector.prototype.getMarker = function(imageThres, candidate) {
     }
 
     window.lastReadMatrix = rotatedBits;
-    window.prevCorners = smoothCorners;      
-  
+    window.prevCorners = smoothCorners;
+
     return new AR.Marker(bestId, smoothCorners);
-  }  
-  
+  }
+
   return null;
 };
